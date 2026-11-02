@@ -12,7 +12,8 @@
     "login": "npx phio login",
     "update": "pocketbase update",
     "typegen": "node scripts/typegen.mjs",
-    "setup:openbeta": "node scripts/setup-openbeta-collections.mjs"
+    "setup:openbeta": "node scripts/setup-openbeta-collections.mjs",
+    "seed:openbeta": "node scripts/seed-openbeta-locations.mjs"
   },
   "description": "Justin's personal blog using PocketPages and DaisyUI.",
   "author": {

@@ -1,0 +1,239 @@
+<script server>
+    const { prepareAreaDetailViewData } = require(`${__hooks}/pages/utils/common.js`)
+    const reqObj = typeof request !== 'undefined' ? request : null
+    const areaView = prepareAreaDetailViewData(params, reqObj, data)
+
+    if (!areaView) {
+        api.status = 404
+    }
+</script>
+
+<% if (!areaView) { %>
+    <%- include('pagenotfound.ejs') %>
+<% } else { %>
+    <div class="bg-base-100 pt-24 pb-20 min-h-[calc(100vh-12.54rem)] not-prose">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6">
+
+            <!-- Top Navigation & Breadcrumbs -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <nav aria-label="Area Breadcrumbs" class="text-sm breadcrumbs py-0 overflow-x-auto">
+                    <ul>
+                        <li>
+                            <a href="/" class="text-base-content/70 hover:text-accent no-underline font-medium">
+                                All Locations
+                            </a>
+                        </li>
+                        <% (areaView.breadcrumbs || []).forEach(crumb => { %>
+                            <li>
+                                <% if (crumb.isCurrent) { %>
+                                    <span class="font-semibold text-secondary"><%= crumb.name %></span>
+                                <% } else { %>
+                                    <a href="<%= crumb.url %>" class="text-base-content/70 hover:text-accent no-underline">
+                                        <%= crumb.name %>
+                                    </a>
+                                <% } %>
+                            </li>
+                        <% }); %>
+                    </ul>
+                </nav>
+
+                <a href="/" class="btn btn-accent btn-sm gap-2 rounded-xl shrink-0 self-start sm:self-auto">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                        fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                        stroke-linejoin="round" aria-hidden="true">
+                        <path d="m12 19-7-7 7-7" />
+                        <path d="M19 12H5" />
+                    </svg>
+                    All Locations
+                </a>
+            </div>
+
+            <!-- Area Header Card -->
+            <div class="card dark:bg-base-300/70 bg-base-300/60 backdrop-blur-xl border border-secondary/20 rounded-2xl p-6 sm:p-8 mb-10 shadow-xl">
+                <div class="flex flex-col md:flex-row md:items-start justify-between gap-4">
+                    <div>
+                        <div class="flex flex-wrap items-center gap-3 mb-2">
+                            <h1 class="text-3xl sm:text-5xl font-bold text-accent tracking-tight">
+                                <%= areaView.name %>
+                            </h1>
+                            <% if (areaView.shortCode) { %>
+                                <span class="badge badge-outline border-accent/40 text-accent font-mono">
+                                    <%= areaView.shortCode %>
+                                </span>
+                            <% } %>
+                        </div>
+
+                        <% if (areaView.hasCoords) { %>
+                            <div class="flex flex-wrap items-center gap-4 text-xs text-base-content/70 font-mono mt-2">
+                                <span class="inline-flex items-center gap-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5 text-secondary" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                                    </svg>
+                                    <%= areaView.lat.toFixed(4) %>, <%= areaView.lng.toFixed(4) %>
+                                </span>
+                                <a href="https://www.google.com/maps/search/?api=1&query=<%= areaView.lat %>,<%= areaView.lng %>"
+                                    target="_blank" rel="noopener noreferrer"
+                                    class="text-accent hover:underline inline-flex items-center gap-1">
+                                    Google Maps ↗
+                                </a>
+                            </div>
+                        <% } %>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <div class="stats bg-base-100/80 border border-base-content/10 shadow-sm rounded-xl">
+                            <div class="stat py-2 px-4">
+                                <div class="stat-title text-xs">Total Climbs</div>
+                                <div class="stat-value text-xl sm:text-2xl text-secondary font-mono">
+                                    <%= areaView.formattedClimbs %>
+                                </div>
+                            </div>
+                            <% if (areaView.children && areaView.children.length > 0) { %>
+                                <div class="stat py-2 px-4">
+                                    <div class="stat-title text-xs">Sub-Areas</div>
+                                    <div class="stat-value text-xl sm:text-2xl text-accent font-mono">
+                                        <%= areaView.children.length %>
+                                    </div>
+                                </div>
+                            <% } %>
+                        </div>
+                    </div>
+                </div>
+
+                <% if (areaView.description || areaView.areaLocation) { %>
+                    <div class="grid gap-6 md:grid-cols-2 mt-6 pt-6 border-t border-base-content/10 text-sm text-base-content/90 leading-relaxed">
+                        <% if (areaView.description) { %>
+                            <div>
+                                <h2 class="text-xs font-bold uppercase tracking-wider text-secondary mb-2">Description</h2>
+                                <p class="whitespace-pre-line"><%= areaView.description %></p>
+                            </div>
+                        <% } %>
+                        <% if (areaView.areaLocation) { %>
+                            <div>
+                                <h2 class="text-xs font-bold uppercase tracking-wider text-secondary mb-2">Approach & Location</h2>
+                                <p class="whitespace-pre-line"><%= areaView.areaLocation %></p>
+                            </div>
+                        <% } %>
+                    </div>
+                <% } %>
+            </div>
+
+            <!-- Sub-Areas / Regions / Crags Directory -->
+            <% if (areaView.children && areaView.children.length > 0) { %>
+                <section class="mb-14" aria-labelledby="heading-subareas">
+                    <div class="flex items-end justify-between mb-2">
+                        <h2 id="heading-subareas" class="text-2xl font-bold text-base-content">
+                            Sub-Areas & Crags (<%= areaView.children.length %>)
+                        </h2>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+
+                    <div class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+                        <% areaView.children.forEach(child => { %>
+                            <a href="<%= child.url %>"
+                                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 dark:hover:bg-base-300/90 border border-secondary/20 hover:border-accent/60 rounded-xl p-4 transition-all duration-200 no-underline group shadow-sm hover:shadow-md">
+                                <div class="flex items-start justify-between gap-2">
+                                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                        <%= child.name %>
+                                    </span>
+                                    <span class="badge badge-sm bg-base-100/80 border-accent/30 text-base-content font-mono shrink-0">
+                                        <%= child.formattedClimbs %>
+                                    </span>
+                                </div>
+                                <% if (child.isBoulder) { %>
+                                    <div class="mt-2">
+                                        <span class="badge badge-xs badge-outline text-base-content/70">Bouldering</span>
+                                    </div>
+                                <% } %>
+                            </a>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <!-- Climbs / Routes List -->
+            <% if (areaView.climbs && areaView.climbs.length > 0) { %>
+                <section aria-labelledby="heading-climbs">
+                    <div class="flex items-end justify-between mb-2">
+                        <h2 id="heading-climbs" class="text-2xl font-bold text-base-content">
+                            Climbs & Routes (<%= areaView.climbs.length %>)
+                        </h2>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+
+                    <div class="grid gap-4 md:grid-cols-2">
+                        <% areaView.climbs.forEach(climb => { %>
+                            <div class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-5 shadow-sm">
+                                <div class="flex items-start justify-between gap-3">
+                                    <div>
+                                        <h3 class="text-lg font-bold text-secondary">
+                                            <%= climb.name %>
+                                        </h3>
+                                        <% if (climb.fa) { %>
+                                            <p class="text-xs text-base-content/60 mt-0.5">
+                                                FA: <%= climb.fa %>
+                                            </p>
+                                        <% } %>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-1.5 shrink-0">
+                                        <% if (climb.primaryGrade) { %>
+                                            <a href="/climbing?query=<%= encodeURIComponent(climb.primaryGrade) %>"
+                                                class="badge badge-accent font-mono font-bold no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer">
+                                                <%= climb.primaryGrade %>
+                                            </a>
+                                        <% } %>
+                                        <% if (climb.safety) { %>
+                                            <span class="badge badge-warning badge-sm font-mono">
+                                                <%= climb.safety %>
+                                            </span>
+                                        <% } %>
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-2 mt-3">
+                                    <% (climb.disciplines || []).forEach(disc => { %>
+                                        <a href="/climbing?query=<%= encodeURIComponent(disc) %>"
+                                            class="badge badge-sm bg-base-100/70 border border-accent/30 text-base-content uppercase text-[10px] tracking-wider no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer">
+                                            <%= disc %>
+                                        </a>
+                                    <% }); %>
+                                    <% if (climb.length > 0) { %>
+                                        <span class="text-xs text-base-content/70 font-mono">
+                                            <%= climb.length %>m
+                                        </span>
+                                    <% } %>
+                                    <% if (climb.boltsCount > 0) { %>
+                                        <span class="text-xs text-base-content/70 font-mono">
+                                            • <%= climb.boltsCount %> bolts
+                                        </span>
+                                    <% } %>
+                                </div>
+
+                                <% if (climb.description) { %>
+                                    <p class="text-sm text-base-content/90 mt-3 line-clamp-4 whitespace-pre-line">
+                                        <%= climb.description %>
+                                    </p>
+                                <% } %>
+                                <% if (climb.protection) { %>
+                                    <p class="text-xs text-base-content/70 mt-2">
+                                        <strong class="text-secondary">Protection:</strong> <%= climb.protection %>
+                                    </p>
+                                <% } %>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <% if ((!areaView.children || areaView.children.length === 0) && (!areaView.climbs || areaView.climbs.length === 0)) { %>
+                <div class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-8 text-center">
+                    <p class="text-base text-base-content/80">
+                        No sub-areas or climbs are currently listed under <strong><%= areaView.name %></strong>.
+                    </p>
+                </div>
+            <% } %>
+
+        </div>
+    </div>
+<% } %>
+

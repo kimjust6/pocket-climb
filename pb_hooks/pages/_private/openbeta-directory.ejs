@@ -1,0 +1,204 @@
+<script server>
+    const { prepareHomepageDirectoryViewData } = require(`${__hooks}/pages/utils/common.js`)
+    const reqObj = typeof request !== 'undefined' ? request : null
+    const directoryView = prepareHomepageDirectoryViewData(params, reqObj, data)
+</script>
+
+<script>
+    var LocationDirectoryApp = {
+        searchQuery: decodeURIComponent('<%- encodeURIComponent(directoryView.searchQuery || "").replace(/\'/g, "%27") %>'),
+        countryFilter: '<%= directoryView.countryFilter %>',
+        handleSearch() {
+            const q = (this.searchQuery || '').trim();
+            const params = new URLSearchParams();
+            if (q) params.set('query', q);
+            if (this.countryFilter && this.countryFilter !== 'ALL') {
+                params.set('country', this.countryFilter);
+            }
+            const qs = params.toString();
+            window.location.href = qs ? `/?${qs}` : '/';
+        },
+        clearSearch() {
+            this.searchQuery = '';
+            if (this.countryFilter && this.countryFilter !== 'ALL') {
+                window.location.href = `/?country=${encodeURIComponent(this.countryFilter)}`;
+            } else {
+                window.location.href = '/';
+            }
+        }
+    }
+</script>
+
+<div class="bg-base-100 pt-10 pb-20 not-prose" v-scope="LocationDirectoryApp">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6">
+
+        <!-- OpenBeta-style Quick Country Nav & Search Bar -->
+        <div class="card dark:bg-base-300/70 bg-base-300/60 backdrop-blur-xl border border-secondary/20 rounded-2xl p-4 sm:p-6 mb-12 shadow-lg">
+            <div class="flex flex-col lg:flex-row items-center justify-between gap-4">
+                <!-- Quick Country Pills (mirrors openbeta.io top bar) -->
+                <div class="flex flex-wrap items-center justify-center lg:justify-start gap-2">
+                    <% (directoryView.quickNavLinks || []).forEach(link => { %>
+                        <% const isActive = directoryView.countryFilter === link.code; %>
+                        <a href="<%= link.href %>"
+                            class="badge lg:badge-lg gap-1.5 py-3 px-3.5 font-semibold no-underline border transition-all duration-200 cursor-pointer <%= isActive ? 'bg-accent text-accent-content border-accent shadow-md' : 'bg-base-100/70 border-base-content/20 text-base-content hover:bg-base-content hover:text-base-100' %>">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
+                                <path d="M2 12h20"/>
+                            </svg>
+                            <span><%= link.label %></span>
+                        </a>
+                    <% }); %>
+                </div>
+
+                <!-- Search Countries, States & Climbing Destinations -->
+                <form role="search" action="/" method="get" @submit.prevent="handleSearch" class="w-full lg:w-96">
+                    <div class="relative w-full">
+                        <label for="location-search-input" class="sr-only">Search countries, states, and climbing locations</label>
+                        <input type="text" inputmode="search" role="searchbox" name="query" id="location-search-input"
+                            v-model="searchQuery"
+                            class="input input-bordered input-sm sm:input-md w-full rounded-full bg-base-100 border border-base-content/30 pl-4 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                            placeholder="Filter countries, states, or crags..."
+                            @keydown.enter="handleSearch" />
+                        <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <button v-show="searchQuery" @click="clearSearch" type="button"
+                                class="btn btn-ghost btn-xs btn-circle text-base-content/70 hover:text-base-content"
+                                aria-label="Clear filter">
+                                ✕
+                            </button>
+                            <button type="submit" class="btn btn-primary btn-xs sm:btn-sm btn-circle" aria-label="Search locations">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Catalog Summary Bar -->
+            <div class="mt-4 pt-3 border-t border-base-content/10 flex flex-wrap items-center justify-between gap-2 text-xs text-base-content/70">
+                <div class="flex flex-wrap items-center gap-3">
+                    <span><strong class="text-secondary"><%= directoryView.stats.totalCountries %></strong> Countries</span>
+                    <span>•</span>
+                    <span><strong class="text-secondary"><%= directoryView.stats.totalStates %></strong> US States</span>
+                    <span>•</span>
+                    <span><strong class="text-secondary"><%= directoryView.stats.formattedTotalClimbs %></strong> Total Climbs Indexed</span>
+                </div>
+                <% if (directoryView.hasSearchQuery || directoryView.countryFilter !== 'ALL') { %>
+                    <a href="/" class="text-accent hover:underline font-medium">Reset filters</a>
+                <% } %>
+            </div>
+        </div>
+
+        <% if (!directoryView.hasResults) { %>
+            <div class="mx-auto max-w-xl py-16 text-center">
+                <h2 class="mb-4 text-3xl font-bold text-accent">No climbing locations found</h2>
+                <p class="mb-6 text-base text-base-content/80">
+                    No countries, states, or climbing destinations matched "<%= directoryView.searchQuery %>".
+                </p>
+                <a href="/" class="btn btn-primary btn-sm rounded-xl">Show All Locations</a>
+            </div>
+        <% } else { %>
+
+            <!-- INTERNATIONAL SECTION -->
+            <% if (directoryView.internationalCountries.length > 0) { %>
+                <section class="block w-full mb-16" aria-labelledby="heading-international">
+                    <div class="flex items-end justify-between mb-2">
+                        <h2 id="heading-international" class="text-2xl sm:text-3xl font-bold text-base-content tracking-tight">
+                            International
+                        </h2>
+                        <span class="text-xs text-base-content/60 font-medium">
+                            <%= directoryView.internationalCountries.length %> <%= directoryView.internationalCountries.length === 1 ? 'country' : 'countries' %>
+                        </span>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+
+                    <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
+                        <% directoryView.internationalCountries.forEach(country => { %>
+                            <div class="mb-8 break-inside-avoid-column break-inside-avoid">
+                                <a href="<%= country.url %>"
+                                    class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
+                                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                        <%= country.name %>
+                                    </span>
+                                    <span class="text-xs text-base-content/70 font-mono">
+                                        <%= country.formattedClimbs %>
+                                    </span>
+                                </a>
+                                <hr class="my-1.5 border-t border-base-content/40" />
+                                <% if (country.locations && country.locations.length > 0) { %>
+                                    <div class="flex flex-col gap-1 mt-1.5">
+                                        <% country.locations.forEach(loc => { %>
+                                            <a href="<%= loc.url %>"
+                                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
+                                                <span class="truncate pr-2"><%= loc.name %></span>
+                                                <% if (loc.totalClimbs > 0) { %>
+                                                    <span class="text-[11px] text-base-content/50 font-mono shrink-0"><%= loc.formattedClimbs %></span>
+                                                <% } %>
+                                            </a>
+                                        <% }); %>
+                                    </div>
+                                <% } %>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <!-- USA SECTION -->
+            <% if (directoryView.usa && directoryView.usa.states.length > 0) { %>
+                <section class="block w-full" aria-labelledby="heading-usa">
+                    <div class="flex items-end justify-between mb-2">
+                        <a href="<%= directoryView.usa.url %>"
+                            class="flex flex-row items-center gap-2 no-underline group">
+                            <h2 id="heading-usa" class="text-2xl sm:text-3xl font-bold text-base-content group-hover:text-accent transition-colors tracking-tight">
+                                USA
+                            </h2>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+                                class="w-5 h-5 text-base-content/70 group-hover:text-accent group-hover:translate-x-0.5 transition-all">
+                                <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clip-rule="evenodd" />
+                            </svg>
+                        </a>
+                        <span class="text-xs text-base-content/70 font-mono">
+                            <%= directoryView.usa.formattedClimbs %> climbs
+                        </span>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+
+                    <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
+                        <% directoryView.usa.states.forEach(state => { %>
+                            <div class="mb-8 break-inside-avoid-column break-inside-avoid">
+                                <a href="<%= state.url %>"
+                                    class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
+                                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                        <%= state.name %>
+                                    </span>
+                                    <span class="text-xs text-base-content/70 font-mono">
+                                        <%= state.formattedClimbs %>
+                                    </span>
+                                </a>
+                                <hr class="my-1.5 border-t border-base-content/40" />
+                                <% if (state.destinations && state.destinations.length > 0) { %>
+                                    <div class="flex flex-col gap-1 mt-1.5">
+                                        <% state.destinations.forEach(dest => { %>
+                                            <a href="<%= dest.url %>"
+                                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
+                                                <span class="truncate pr-2"><%= dest.name %></span>
+                                                <% if (dest.totalClimbs > 0) { %>
+                                                    <span class="text-[11px] text-base-content/50 font-mono shrink-0"><%= dest.formattedClimbs %></span>
+                                                <% } %>
+                                            </a>
+                                        <% }); %>
+                                    </div>
+                                <% } %>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+        <% } %>
+    </div>
+</div>
+
