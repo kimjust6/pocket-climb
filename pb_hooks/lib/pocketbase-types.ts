@@ -12,13 +12,16 @@ export const Collections = {
 	Otps: "_otps",
 	Superusers: "_superusers",
 	AdminSettings: "admin_settings",
+	Areas: "areas",
 	BlogPosts: "blog_posts",
+	ClimbMedia: "climb_media",
 	ClimbingPosts: "climbing_posts",
+	Climbs: "climbs",
 	Huggies: "huggies",
+	Organizations: "organizations",
+	Pitches: "pitches",
+	Ticks: "ticks",
 	Users: "users",
-	ZendeskOrganizations: "zendesk_organizations",
-	ZendeskTickets: "zendesk_tickets",
-	ZendeskuserDiscorduser: "zendeskuser_discorduser",
 } as const
 export type Collections = typeof Collections[keyof typeof Collections]
 
@@ -109,6 +112,251 @@ export type AdminSettingsRecord = {
 	value?: string
 }
 
+export type AreasRecord<
+	Taggregate = unknown,
+	Tancestors = unknown,
+	TauthorMetadata = unknown,
+	Tbbox = unknown,
+	Tcontent = unknown,
+	Tmetadata = unknown,
+	TpathTokens = unknown,
+	Tpolygon = unknown
+> = {
+	aggregate?: null | Taggregate
+	ancestors?: null | Tancestors
+	areaLocation?: string
+	authorMetadata?: null | TauthorMetadata
+	bbox?: null | Tbbox
+	content?: null | Tcontent
+	created: IsoAutoDateString
+	density?: number
+	description?: string
+	gradeContext?: string
+	id: string
+	isBoulder?: boolean
+	isDeleted?: boolean
+	isDestination?: boolean
+	isLeaf?: boolean
+	lat?: number
+	leftRightIndex?: number
+	lng?: number
+	metadata?: null | Tmetadata
+	mpId?: string
+	name: string
+	openbetaId?: string
+	openbetaUuid: string
+	parent?: RecordIdString
+	parentUuid?: string
+	pathHash?: string
+	pathTokens?: null | TpathTokens
+	polygon?: null | Tpolygon
+	shortCode?: string
+	totalClimbs?: number
+	updated: IsoAutoDateString
+}
+
+export const ClimbDisciplinesOptions = {
+	"trad": "trad",
+	"sport": "sport",
+	"bouldering": "bouldering",
+	"deepwatersolo": "deepwatersolo",
+	"alpine": "alpine",
+	"snow": "snow",
+	"ice": "ice",
+	"mixed": "mixed",
+	"aid": "aid",
+	"tr": "tr",
+} as const
+export type ClimbDisciplinesOptions = typeof ClimbDisciplinesOptions[keyof typeof ClimbDisciplinesOptions]
+
+export const ClimbsSafetyOptions = {
+	"UNSPECIFIED": "UNSPECIFIED",
+	"PG": "PG",
+	"PG13": "PG13",
+	"runout": "runout",
+	"terrain": "terrain",
+	"R": "R",
+	"X": "X",
+} as const
+export type ClimbsSafetyOptions = typeof ClimbsSafetyOptions[keyof typeof ClimbsSafetyOptions]
+
+export type ClimbsRecord<
+	Tancestors = unknown,
+	TauthorMetadata = unknown,
+	Tcontent = unknown,
+	Tgrades = unknown,
+	Tmetadata = unknown,
+	TpathTokens = unknown,
+	Ttype = unknown
+> = {
+	ancestors?: null | Tancestors
+	area?: RecordIdString
+	areaUuid?: string
+	authorMetadata?: null | TauthorMetadata
+	boltsCount?: number
+	content?: null | Tcontent
+	created: IsoAutoDateString
+	description?: string
+	disciplines?: ClimbDisciplinesOptions[]
+	fa?: string
+	gradeContext?: string
+	gradeEwbank?: string
+	gradeFont?: string
+	gradeFrench?: string
+	gradeUiaa?: string
+	gradeVscale?: string
+	gradeWi?: string
+	gradeYds?: string
+	grades?: null | Tgrades
+	id: string
+	isAid?: boolean
+	isAlpine?: boolean
+	isBouldering?: boolean
+	isDeepwatersolo?: boolean
+	isDeleted?: boolean
+	isIce?: boolean
+	isMixed?: boolean
+	isSnow?: boolean
+	isSport?: boolean
+	isTr?: boolean
+	isTrad?: boolean
+	lat?: number
+	leftRightIndex?: number
+	length?: number
+	lng?: number
+	location?: string
+	metadata?: null | Tmetadata
+	mpId?: string
+	name: string
+	openbetaId?: string
+	openbetaUuid: string
+	pathTokens?: null | TpathTokens
+	protection?: string
+	safety?: ClimbsSafetyOptions
+	type?: null | Ttype
+	updated: IsoAutoDateString
+}
+
+export type PitchesRecord<Tgrades = unknown, Ttype = unknown> = {
+	boltsCount?: number
+	climb: RecordIdString
+	created: IsoAutoDateString
+	description?: string
+	disciplines?: ClimbDisciplinesOptions[]
+	gradeFrench?: string
+	gradeVscale?: string
+	gradeYds?: string
+	grades?: null | Tgrades
+	id: string
+	isDeleted?: boolean
+	length?: number
+	openbetaId?: string
+	parentUuid?: string
+	pitchNumber: number
+	type?: null | Ttype
+	updated: IsoAutoDateString
+}
+
+export const TicksStyleOptions = {
+	"Lead": "Lead",
+	"Solo": "Solo",
+	"TR": "TR",
+	"Follow": "Follow",
+	"Aid": "Aid",
+	"Boulder": "Boulder",
+} as const
+export type TicksStyleOptions = typeof TicksStyleOptions[keyof typeof TicksStyleOptions]
+
+export const TicksAttemptTypeOptions = {
+	"Onsight": "Onsight",
+	"Flash": "Flash",
+	"Pinkpoint": "Pinkpoint",
+	"Frenchfree": "Frenchfree",
+	"Attempt": "Attempt",
+	"Send": "Send",
+	"Redpoint": "Redpoint",
+	"Repeat": "Repeat",
+} as const
+export type TicksAttemptTypeOptions = typeof TicksAttemptTypeOptions[keyof typeof TicksAttemptTypeOptions]
+
+export const TicksSourceOptions = {
+	"OB": "OB",
+	"MP": "MP",
+	"Local": "Local",
+} as const
+export type TicksSourceOptions = typeof TicksSourceOptions[keyof typeof TicksSourceOptions]
+
+export type TicksRecord<TuserProfile = unknown> = {
+	attemptType?: TicksAttemptTypeOptions
+	climb?: RecordIdString
+	climbUuid?: string
+	climbingPost?: RecordIdString
+	created: IsoAutoDateString
+	dateClimbed: IsoDateString
+	grade?: string
+	id: string
+	isDeleted?: boolean
+	name?: string
+	notes?: string
+	openbetaId?: string
+	openbetaUserId?: string
+	source?: TicksSourceOptions
+	style?: TicksStyleOptions
+	updated: IsoAutoDateString
+	user?: RecordIdString
+	userProfile?: null | TuserProfile
+}
+
+export type OrganizationsRecord<
+	TassociatedAreaIds = unknown,
+	TauthorMetadata = unknown,
+	Tcontent = unknown,
+	TexcludedAreaIds = unknown
+> = {
+	areas?: RecordIdString[]
+	associatedAreaIds?: null | TassociatedAreaIds
+	authorMetadata?: null | TauthorMetadata
+	content?: null | Tcontent
+	created: IsoAutoDateString
+	description?: string
+	displayName: string
+	donationLink?: string
+	email?: string
+	excludedAreaIds?: null | TexcludedAreaIds
+	facebookLink?: string
+	hardwareReportLink?: string
+	id: string
+	instagramLink?: string
+	isDeleted?: boolean
+	openbetaId?: string
+	orgId: string
+	orgType?: string
+	updated: IsoAutoDateString
+	website?: string
+}
+
+export type ClimbMediaRecord<TentityTags = unknown, TuserProfile = unknown> = {
+	area?: RecordIdString
+	climb?: RecordIdString
+	created: IsoAutoDateString
+	entityTags?: null | TentityTags
+	file?: FileNameString
+	format?: string
+	height?: number
+	id: string
+	isDeleted?: boolean
+	mediaUrl: string
+	openbetaId?: string
+	size?: number
+	uploadTime?: IsoDateString
+	updated: IsoAutoDateString
+	user?: RecordIdString
+	userProfile?: null | TuserProfile
+	userUuid?: string
+	username?: string
+	width?: number
+}
+
 export type BlogPostsRecord = {
 	content1?: HTMLString
 	content2?: HTMLString
@@ -178,37 +426,6 @@ export type UsersRecord = {
 	verified?: boolean
 }
 
-export type ZendeskOrganizationsRecord = {
-	created: IsoAutoDateString
-	id: string
-	organizationId?: string
-	organizationName?: string
-	shortHand?: string
-	updated: IsoAutoDateString
-}
-
-export type ZendeskTicketsRecord<Tdata = unknown> = {
-	created: IsoAutoDateString
-	data?: null | Tdata
-	id: string
-	ticketId?: number
-	ticketType?: string
-	updated: IsoAutoDateString
-	zendeskActorId?: number
-	zendeskUserId?: number
-}
-
-export type ZendeskuserDiscorduserRecord = {
-	created: IsoAutoDateString
-	description?: string
-	discord_id?: string
-	id: string
-	name?: string
-	notification_options?: string
-	updated: IsoAutoDateString
-	zendesk_id?: string
-}
-
 // Response types include system fields and match responses from the PocketBase API
 export type AuthoriginsResponse<Texpand = unknown> = Required<AuthoriginsRecord> & BaseSystemFields<Texpand>
 export type ExternalauthsResponse<Texpand = unknown> = Required<ExternalauthsRecord> & BaseSystemFields<Texpand>
@@ -216,13 +433,41 @@ export type MfasResponse<Texpand = unknown> = Required<MfasRecord> & BaseSystemF
 export type OtpsResponse<Texpand = unknown> = Required<OtpsRecord> & BaseSystemFields<Texpand>
 export type SuperusersResponse<Texpand = unknown> = Required<SuperusersRecord> & AuthSystemFields<Texpand>
 export type AdminSettingsResponse<Texpand = unknown> = Required<AdminSettingsRecord> & BaseSystemFields<Texpand>
+export type AreasResponse<
+	Taggregate = unknown,
+	Tancestors = unknown,
+	TauthorMetadata = unknown,
+	Tbbox = unknown,
+	Tcontent = unknown,
+	Tmetadata = unknown,
+	TpathTokens = unknown,
+	Tpolygon = unknown,
+	Texpand = unknown
+> = Required<AreasRecord<Taggregate, Tancestors, TauthorMetadata, Tbbox, Tcontent, Tmetadata, TpathTokens, Tpolygon>> & BaseSystemFields<Texpand>
 export type BlogPostsResponse<Texpand = unknown> = Required<BlogPostsRecord> & BaseSystemFields<Texpand>
+export type ClimbMediaResponse<TentityTags = unknown, TuserProfile = unknown, Texpand = unknown> = Required<ClimbMediaRecord<TentityTags, TuserProfile>> & BaseSystemFields<Texpand>
 export type ClimbingPostsResponse<Texpand = unknown> = Required<ClimbingPostsRecord> & BaseSystemFields<Texpand>
+export type ClimbsResponse<
+	Tancestors = unknown,
+	TauthorMetadata = unknown,
+	Tcontent = unknown,
+	Tgrades = unknown,
+	Tmetadata = unknown,
+	TpathTokens = unknown,
+	Ttype = unknown,
+	Texpand = unknown
+> = Required<ClimbsRecord<Tancestors, TauthorMetadata, Tcontent, Tgrades, Tmetadata, TpathTokens, Ttype>> & BaseSystemFields<Texpand>
 export type HuggiesResponse<Texpand = unknown> = Required<HuggiesRecord> & BaseSystemFields<Texpand>
+export type OrganizationsResponse<
+	TassociatedAreaIds = unknown,
+	TauthorMetadata = unknown,
+	Tcontent = unknown,
+	TexcludedAreaIds = unknown,
+	Texpand = unknown
+> = Required<OrganizationsRecord<TassociatedAreaIds, TauthorMetadata, Tcontent, TexcludedAreaIds>> & BaseSystemFields<Texpand>
+export type PitchesResponse<Tgrades = unknown, Ttype = unknown, Texpand = unknown> = Required<PitchesRecord<Tgrades, Ttype>> & BaseSystemFields<Texpand>
+export type TicksResponse<TuserProfile = unknown, Texpand = unknown> = Required<TicksRecord<TuserProfile>> & BaseSystemFields<Texpand>
 export type UsersResponse<Texpand = unknown> = Required<UsersRecord> & AuthSystemFields<Texpand>
-export type ZendeskOrganizationsResponse<Texpand = unknown> = Required<ZendeskOrganizationsRecord> & BaseSystemFields<Texpand>
-export type ZendeskTicketsResponse<Tdata = unknown, Texpand = unknown> = Required<ZendeskTicketsRecord<Tdata>> & BaseSystemFields<Texpand>
-export type ZendeskuserDiscorduserResponse<Texpand = unknown> = Required<ZendeskuserDiscorduserRecord> & BaseSystemFields<Texpand>
 
 // Types containing all Records and Responses, useful for creating typing helper functions
 
@@ -233,13 +478,16 @@ export type CollectionRecords = {
 	_otps: OtpsRecord
 	_superusers: SuperusersRecord
 	admin_settings: AdminSettingsRecord
+	areas: AreasRecord
 	blog_posts: BlogPostsRecord
+	climb_media: ClimbMediaRecord
 	climbing_posts: ClimbingPostsRecord
+	climbs: ClimbsRecord
 	huggies: HuggiesRecord
+	organizations: OrganizationsRecord
+	pitches: PitchesRecord
+	ticks: TicksRecord
 	users: UsersRecord
-	zendesk_organizations: ZendeskOrganizationsRecord
-	zendesk_tickets: ZendeskTicketsRecord
-	zendeskuser_discorduser: ZendeskuserDiscorduserRecord
 }
 
 export type CollectionResponses = {
@@ -249,13 +497,16 @@ export type CollectionResponses = {
 	_otps: OtpsResponse
 	_superusers: SuperusersResponse
 	admin_settings: AdminSettingsResponse
+	areas: AreasResponse
 	blog_posts: BlogPostsResponse
+	climb_media: ClimbMediaResponse
 	climbing_posts: ClimbingPostsResponse
+	climbs: ClimbsResponse
 	huggies: HuggiesResponse
+	organizations: OrganizationsResponse
+	pitches: PitchesResponse
+	ticks: TicksResponse
 	users: UsersResponse
-	zendesk_organizations: ZendeskOrganizationsResponse
-	zendesk_tickets: ZendeskTicketsResponse
-	zendeskuser_discorduser: ZendeskuserDiscorduserResponse
 }
 
 // Utility types for create/update operations

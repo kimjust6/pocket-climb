@@ -1,4 +1,14 @@
-const { POCKET_BLOGPOSTS, POCKET_CLIMBING_POSTS, POCKET_USERS } = require('./constants')
+const {
+    POCKET_BLOGPOSTS,
+    POCKET_CLIMBING_POSTS,
+    POCKET_AREAS,
+    POCKET_CLIMBS,
+    POCKET_PITCHES,
+    POCKET_TICKS,
+    POCKET_ORGANIZATIONS,
+    POCKET_CLIMB_MEDIA,
+    POCKET_USERS,
+} = require('./constants')
 
 /**
  * Get a single blog post by ID using server-side $app
@@ -181,6 +191,12 @@ module.exports = {
     getClimbingLogsByTitlePrefix,
     getAllClimbingLogs,
     POCKET_CLIMBING_POSTS,
+    POCKET_AREAS,
+    POCKET_CLIMBS,
+    POCKET_PITCHES,
+    POCKET_TICKS,
+    POCKET_ORGANIZATIONS,
+    POCKET_CLIMB_MEDIA,
     POCKET_USERS,
     isClimbingRecord,
     getCombinedHomepagePosts,
@@ -189,7 +205,15 @@ module.exports = {
     getAuthRecordFromToken,
     getOAuthProviders,
     requestPasswordResetByEmail,
-    registerNewUser
+    registerNewUser,
+    getAreaByUuid,
+    getAreas,
+    getClimbByUuid,
+    getClimbs,
+    getPitchesByClimbId,
+    getTicksByClimbId,
+    getOrganizations,
+    getClimbMedia
 }
 
 
@@ -456,6 +480,269 @@ function registerNewUser({ email, password, name }) {
         const msg = err?.message ? String(err.message) : 'Unable to create account. Please check your details and try again.';
         return { ok: false, error: msg };
     }
+}
+
+/**
+ * Get a single area record by OpenBeta UUID or PocketBase ID
+ * @param {string} uuidOrId
+ * @returns {Record|null}
+ */
+function getAreaByUuid(uuidOrId) {
+    if (!uuidOrId) return null;
+    try {
+        return $app.findFirstRecordByFilter(
+            POCKET_AREAS,
+            "(openbetaUuid = {:uuidOrId} || id = {:uuidOrId}) && isDeleted = false",
+            { uuidOrId }
+        );
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Get a paginated list of areas
+ * @param {number} page
+ * @param {number} perPage
+ * @param {string} query
+ * @param {string} parentId
+ * @returns {object}
+ */
+function getAreas(page = 1, perPage = 20, query = "", parentId = "") {
+    const offset = (page - 1) * perPage;
+    let filter = "isDeleted = false";
+    const filterParams = {};
+
+    if (query) {
+        filter += " && (name ~ {:query} || description ~ {:query} || areaLocation ~ {:query} || shortCode ~ {:query})";
+        filterParams.query = query;
+    }
+    if (parentId) {
+        filter += " && (parent = {:parentId} || parentUuid = {:parentId})";
+        filterParams.parentId = parentId;
+    }
+
+    const records = $app.findRecordsByFilter(
+        POCKET_AREAS,
+        filter,
+        "leftRightIndex,name",
+        perPage,
+        offset,
+        filterParams
+    );
+
+    const countResult = arrayOf(new DynamicModel({ total: 0 }));
+    let queryBuilder = $app.db()
+        .select("COUNT(*) as total")
+        .from(POCKET_AREAS)
+        .where($dbx.exp("isDeleted = 0"));
+
+    if (query) {
+        queryBuilder.andWhere(
+            $dbx.exp(
+                "(name LIKE {:query} OR description LIKE {:query} OR areaLocation LIKE {:query} OR shortCode LIKE {:query})",
+                { query: `%${query}%` }
+            )
+        );
+    }
+    if (parentId) {
+        queryBuilder.andWhere(
+            $dbx.exp("(parent = {:parentId} OR parentUuid = {:parentId})", { parentId })
+        );
+    }
+
+    queryBuilder.all(countResult);
+    const totalItems = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(totalItems / perPage);
+
+    return {
+        items: records || [],
+        totalItems,
+        totalPages,
+        page
+    };
+}
+
+/**
+ * Get a single climb record by OpenBeta UUID or PocketBase ID
+ * @param {string} uuidOrId
+ * @returns {Record|null}
+ */
+function getClimbByUuid(uuidOrId) {
+    if (!uuidOrId) return null;
+    try {
+        return $app.findFirstRecordByFilter(
+            POCKET_CLIMBS,
+            "(openbetaUuid = {:uuidOrId} || id = {:uuidOrId}) && isDeleted = false",
+            { uuidOrId }
+        );
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Get a paginated list of climbs
+ * @param {number} page
+ * @param {number} perPage
+ * @param {string} query
+ * @param {object} options - Optional { areaId, discipline, grade }
+ * @returns {object}
+ */
+function getClimbs(page = 1, perPage = 20, query = "", options = {}) {
+    const offset = (page - 1) * perPage;
+    let filter = "isDeleted = false";
+    const filterParams = {};
+    const { areaId, discipline, grade } = options || {};
+
+    if (query) {
+        filter += " && (name ~ {:query} || description ~ {:query} || location ~ {:query} || fa ~ {:query} || gradeYds ~ {:query} || gradeVscale ~ {:query})";
+        filterParams.query = query;
+    }
+    if (areaId) {
+        filter += " && (area = {:areaId} || areaUuid = {:areaId})";
+        filterParams.areaId = areaId;
+    }
+    if (discipline) {
+        filter += " && disciplines ~ {:discipline}";
+        filterParams.discipline = discipline;
+    }
+    if (grade) {
+        filter += " && (gradeYds = {:grade} || gradeVscale = {:grade} || gradeFont = {:grade} || gradeFrench = {:grade})";
+        filterParams.grade = grade;
+    }
+
+    const records = $app.findRecordsByFilter(
+        POCKET_CLIMBS,
+        filter,
+        "leftRightIndex,name",
+        perPage,
+        offset,
+        filterParams
+    );
+
+    const countResult = arrayOf(new DynamicModel({ total: 0 }));
+    let queryBuilder = $app.db()
+        .select("COUNT(*) as total")
+        .from(POCKET_CLIMBS)
+        .where($dbx.exp("isDeleted = 0"));
+
+    if (query) {
+        queryBuilder.andWhere(
+            $dbx.exp(
+                "(name LIKE {:query} OR description LIKE {:query} OR location LIKE {:query} OR fa LIKE {:query} OR gradeYds LIKE {:query} OR gradeVscale LIKE {:query})",
+                { query: `%${query}%` }
+            )
+        );
+    }
+    if (areaId) {
+        queryBuilder.andWhere(
+            $dbx.exp("(area = {:areaId} OR areaUuid = {:areaId})", { areaId })
+        );
+    }
+    if (discipline) {
+        queryBuilder.andWhere(
+            $dbx.exp("disciplines LIKE {:discipline}", { discipline: `%${discipline}%` })
+        );
+    }
+    if (grade) {
+        queryBuilder.andWhere(
+            $dbx.exp("(gradeYds = {:grade} OR gradeVscale = {:grade} OR gradeFont = {:grade} OR gradeFrench = {:grade})", { grade })
+        );
+    }
+
+    queryBuilder.all(countResult);
+    const totalItems = countResult[0]?.total || 0;
+    const totalPages = Math.ceil(totalItems / perPage);
+
+    return {
+        items: records || [],
+        totalItems,
+        totalPages,
+        page
+    };
+}
+
+/**
+ * Get pitches for a climb ordered by pitchNumber
+ * @param {string} climbIdOrUuid
+ * @returns {Array<Record>}
+ */
+function getPitchesByClimbId(climbIdOrUuid) {
+    if (!climbIdOrUuid) return [];
+    return $app.findRecordsByFilter(
+        POCKET_PITCHES,
+        "(climb = {:climbIdOrUuid} || parentUuid = {:climbIdOrUuid}) && isDeleted = false",
+        "pitchNumber",
+        0,
+        0,
+        { climbIdOrUuid }
+    ) || [];
+}
+
+/**
+ * Get ticks for a climb ordered by dateClimbed descending
+ * @param {string} climbIdOrUuid
+ * @returns {Array<Record>}
+ */
+function getTicksByClimbId(climbIdOrUuid) {
+    if (!climbIdOrUuid) return [];
+    return $app.findRecordsByFilter(
+        POCKET_TICKS,
+        "(climb = {:climbIdOrUuid} || climbUuid = {:climbIdOrUuid}) && isDeleted = false",
+        "-dateClimbed,-created",
+        0,
+        0,
+        { climbIdOrUuid }
+    ) || [];
+}
+
+/**
+ * Get climbing organizations
+ * @param {string} areaId - Optional PocketBase area ID
+ * @returns {Array<Record>}
+ */
+function getOrganizations(areaId = "") {
+    let filter = "isDeleted = false";
+    const filterParams = {};
+    if (areaId) {
+        filter += " && areas ~ {:areaId}";
+        filterParams.areaId = areaId;
+    }
+    return $app.findRecordsByFilter(
+        POCKET_ORGANIZATIONS,
+        filter,
+        "displayName",
+        0,
+        0,
+        filterParams
+    ) || [];
+}
+
+/**
+ * Get media associated with a climb or area
+ * @param {{ climbId?: string, areaId?: string }} params
+ * @returns {Array<Record>}
+ */
+function getClimbMedia({ climbId = "", areaId = "" } = {}) {
+    let filter = "isDeleted = false";
+    const filterParams = {};
+    if (climbId) {
+        filter += " && climb = {:climbId}";
+        filterParams.climbId = climbId;
+    }
+    if (areaId) {
+        filter += " && area = {:areaId}";
+        filterParams.areaId = areaId;
+    }
+    return $app.findRecordsByFilter(
+        POCKET_CLIMB_MEDIA,
+        filter,
+        "-uploadTime,-created",
+        0,
+        0,
+        filterParams
+    ) || [];
 }
 
 

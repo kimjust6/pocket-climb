@@ -1,6 +1,13 @@
 const POCKET_BLOGPOSTS = "blog_posts"
 const POCKET_CLIMBING_POSTS = "climbing_posts"
+const POCKET_AREAS = "areas"
+const POCKET_CLIMBS = "climbs"
+const POCKET_PITCHES = "pitches"
+const POCKET_TICKS = "ticks"
+const POCKET_ORGANIZATIONS = "organizations"
+const POCKET_CLIMB_MEDIA = "climb_media"
 const POCKET_USERS = "users"
+const OPENBETA_API_ENDPOINT = "https://api.openbeta.io"
 const AUTH_COOKIE_NAME = "pb_auth"
 const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 14 // 14 days
 const POCKET_ZENDESKUSER_DISCORDUSER = "zendeskuser_discorduser"
@@ -85,7 +92,14 @@ const COLLECTION_SUGGEST_URL = "https://map.toronto.ca/cotgeocoder/rest/geocoder
 module.exports = {
     POCKET_BLOGPOSTS,
     POCKET_CLIMBING_POSTS,
+    POCKET_AREAS,
+    POCKET_CLIMBS,
+    POCKET_PITCHES,
+    POCKET_TICKS,
+    POCKET_ORGANIZATIONS,
+    POCKET_CLIMB_MEDIA,
     POCKET_USERS,
+    OPENBETA_API_ENDPOINT,
     AUTH_COOKIE_NAME,
     AUTH_COOKIE_MAX_AGE,
     POCKET_ZENDESKUSER_DISCORDUSER,
