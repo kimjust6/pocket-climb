@@ -146,35 +146,6 @@ function getBaseUrl() {
 
 /**
  * 
- * @param {Object} blog 
- * @returns {string|null}
- */
-function getImageUrl(blog) {
-    if (!blog) return null;
-
-    // Handle PocketBase Record objects (server-side)
-    if (typeof blog.getString === 'function') {
-        const coverImage = blog.getString('coverImage');
-        const collectionId = blog.collectionId || blog.getString('collectionId') || blog.collection?.()?.id;
-        const id = blog.id;
-
-        if (coverImage && collectionId && id) {
-            return `${getBaseUrl()}/api/files/${collectionId}/${id}/${coverImage}`;
-        }
-        return null;
-    }
-
-    // Handle plain objects (client-side or serialized)
-    if (blog.coverImage && blog.collectionId && blog.id) {
-        return (
-            `${getBaseUrl()}/api/files/${blog.collectionId}/${blog.id}/${blog.coverImage}`
-        )
-    }
-    return null;
-}
-
-/**
- * 
  * @param {string} title 
  * @returns {string}
  */
@@ -936,68 +907,6 @@ function toNoCookie(s) {
 }
 
 /**
- * Format a post record into a clean view-model object for cards (hero & grid)
- */
-function formatPostViewModel(post, isHomepage = false, isClimbing = false) {
-    if (!post) return null;
-    const { isClimbingRecord } = require(`${__hooks}/pages/utils/pocket.js`);
-    const itemIsClimbing = isClimbing || isClimbingRecord(post);
-    const title = post.getString('title') || '';
-    const slug = slugifyTitle(title);
-    const rawText = (itemIsClimbing ? post.getString('content') : post.getString('content1')) || '';
-    const previewText = extractPreviewText(rawText);
-
-    const rawImg = getImageUrl(post);
-    const heroImageUrl = itemIsClimbing
-        ? (rawImg ? `${rawImg}?thumb=800x0` : '/background.webp')
-        : (rawImg ? `${rawImg}?thumb=800x0` : (post.getString('coverImageAlt') || null));
-
-    const gridImageUrl = itemIsClimbing
-        ? (rawImg ? `${rawImg}?thumb=350x0` : '/background.webp')
-        : (rawImg ? `${rawImg}?thumb=350x0` : (post.getString('coverImageAlt') || null));
-
-    const postId = post.id;
-    const link = itemIsClimbing
-        ? `/climbing/${encodeURIComponent(slug)}/${postId}`
-        : `/blog/posts/${encodeURIComponent(slug)}/${postId}`;
-
-    const dateRaw = itemIsClimbing
-        ? (post.getString('date') || post.getString('created'))
-        : (post.getString('manualPublishDate') || post.getString('created'));
-    const formattedDate = formatDateTime(new Date(dateRaw));
-
-    let badges = [];
-    if (itemIsClimbing) {
-        if (post.getString('climbType')) badges.push({ text: post.getString('climbType'), query: post.getString('climbType').trim() });
-        if (post.getString('grade')) badges.push({ text: post.getString('grade'), query: post.getString('grade').trim() });
-        if (post.getString('style')) badges.push({ text: post.getString('style'), query: post.getString('style').trim() });
-    } else {
-        const blogTags = post.getString('tags');
-        if (blogTags && blogTags.length > 0) {
-            blogTags.split(';').forEach(tag => {
-                const t = tag.trim();
-                if (t) badges.push({ text: t, query: t });
-            });
-        }
-    }
-
-    return {
-        id: post.id,
-        title,
-        slug,
-        link,
-        previewText,
-        heroImageUrl,
-        gridImageUrl,
-        formattedDate,
-        itemIsClimbing,
-        badges,
-        location: itemIsClimbing ? post.getString('location') : null,
-        rawRecord: post
-    };
-}
-
-/**
  * Helper to update an existing metadata entry or append a new one
  */
 function setOrUpdateMeta(metadata, name, content) {
@@ -1008,302 +917,6 @@ function setOrUpdateMeta(metadata, name, content) {
     } else {
         metadata.push({ name, content: String(content) });
     }
-}
-
-/**
- * Prepares blog posts view data on the server
- */
-function prepareBlogPostsViewData(blogposts, isHomepage, isClimbing, params = {}, req = null, data = {}) {
-    const rawQuery = params?.query || '';
-    const query = sanitizeSearchTerm(rawQuery);
-    const hasSearchQuery = !isHomepage && !!query;
-
-    const items = (blogposts?.items || []).map(post => formatPostViewModel(post, isHomepage, isClimbing));
-
-    let heroPost = null;
-    let gridPosts = items;
-    if (isHomepage && gridPosts.length > 0) {
-        heroPost = gridPosts[0];
-        gridPosts = gridPosts.slice(1);
-    }
-
-    const hasPosts = !!heroPost || gridPosts.length > 0;
-    const hasNoSearchResults = hasSearchQuery && !hasPosts;
-
-    let fullParams = hasSearchQuery ? `&query=${encodeURIComponent(query)}` : '';
-    if (isClimbing && params?.climbType) {
-        fullParams += `&climbType=${encodeURIComponent(params.climbType)}`;
-    }
-
-    if (data?.metadata) {
-        try {
-            if (isClimbing) {
-                const title = 'The Climbing Blog | Justin Kim';
-                const description = 'A personal record of my falls, projects, and sends (on rock and in the gym).';
-                const url = `${getBaseUrl()}/climbing`;
-                const ogImg = `${getBaseUrl()}/og-image.png`;
-
-                setOrUpdateMeta(data.metadata, 'title', title);
-                setOrUpdateMeta(data.metadata, 'og:title', 'The Climbing Blog');
-                setOrUpdateMeta(data.metadata, 'twitter:title', 'The Climbing Blog');
-                setOrUpdateMeta(data.metadata, 'description', description);
-                setOrUpdateMeta(data.metadata, 'og:description', description);
-                setOrUpdateMeta(data.metadata, 'twitter:description', description);
-                setOrUpdateMeta(data.metadata, 'url', url);
-                setOrUpdateMeta(data.metadata, 'og:url', url);
-                setOrUpdateMeta(data.metadata, 'twitter:url', url);
-                setOrUpdateMeta(data.metadata, 'og:image', ogImg);
-                setOrUpdateMeta(data.metadata, 'twitter:image', ogImg);
-                setOrUpdateMeta(data.metadata, 'og:site_name', 'The Climbing Blog');
-                setOrUpdateMeta(data.metadata, 'og:type', 'website');
-            } else if (!isHomepage) {
-                const title = 'The Dev Blog | Justin Kim';
-                const description = 'Keeping a personal record of my mistakes and lessons learned as a developer.';
-                const url = `${getBaseUrl()}/blog/posts`;
-                const ogImg = `${getBaseUrl()}/og-image.png`;
-
-                setOrUpdateMeta(data.metadata, 'title', title);
-                setOrUpdateMeta(data.metadata, 'og:title', 'The Development Blog');
-                setOrUpdateMeta(data.metadata, 'twitter:title', 'The Development Blog');
-                setOrUpdateMeta(data.metadata, 'description', description);
-                setOrUpdateMeta(data.metadata, 'og:description', description);
-                setOrUpdateMeta(data.metadata, 'twitter:description', description);
-                setOrUpdateMeta(data.metadata, 'url', url);
-                setOrUpdateMeta(data.metadata, 'og:url', url);
-                setOrUpdateMeta(data.metadata, 'twitter:url', url);
-                setOrUpdateMeta(data.metadata, 'og:image', ogImg);
-                setOrUpdateMeta(data.metadata, 'twitter:image', ogImg);
-                setOrUpdateMeta(data.metadata, 'og:site_name', 'Wiki Bloc');
-                setOrUpdateMeta(data.metadata, 'og:type', 'website');
-            }
-        } catch (err) {
-            console.error('Error preparing blog posts view metadata: ', err);
-        }
-    }
-
-    return {
-        query,
-        hasSearchQuery,
-        heroPost,
-        gridPosts,
-        hasPosts,
-        hasNoSearchResults,
-        fullParams
-    };
-}
-
-/**
- * Prepares single blog view data on the server, including metadata updates and GA view_item tracking
- */
-function prepareBlogSingleViewData(singleBlog, isClimbing, params = {}, data = {}, req = null) {
-    if (!singleBlog && (params?.title || params?.id)) {
-        try {
-            const { getBlogPostById, getBlogPostsByTitlePrefix, getClimbingPostById, getClimbingLogsByTitlePrefix } = require(`${__hooks}/pages/utils/pocket.js`);
-
-            // New URL format: /climbing/:title/:id or /blog/posts/:title/:id
-            // params.id is the PocketBase record ID (direct lookup — fastest path)
-            if (params.id) {
-                try {
-                    singleBlog = isClimbing
-                        ? getClimbingPostById(params.id)
-                        : getBlogPostById(params.id);
-                } catch (_) {
-                    singleBlog = null;
-                }
-            }
-
-            // Fallback: old-format URL — resolve by slug match (for redirect pages)
-            if (!singleBlog && params.title) {
-                const titleParam = params.title;
-                const firstWord = titleParam.split('-')[0].replace(/"/g, '\\"');
-                const possibleBlogs = isClimbing
-                    ? getClimbingLogsByTitlePrefix(firstWord)
-                    : getBlogPostsByTitlePrefix(firstWord);
-
-                const targetSlug = titleParam.toLowerCase();
-                singleBlog = possibleBlogs.find(
-                    (b) => slugifyTitle(b.getString('title')) === targetSlug
-                ) || null;
-            }
-        } catch (error) {
-            console.error('Error fetching single blog post: ', error);
-        }
-    }
-
-    let viewModel = null;
-
-    if (singleBlog) {
-        const postTitle = singleBlog.getString('title') || '';
-        const slug = slugifyTitle(postTitle);
-        const canonicalPath = isClimbing
-            ? `/climbing/${encodeURIComponent(slug)}/${singleBlog.id}`
-            : `/blog/posts/${encodeURIComponent(slug)}/${singleBlog.id}`;
-        const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
-
-        if (data?.metadata) {
-            try {
-                const pageTitle = isClimbing
-                    ? `${postTitle} | Wiki Bloc`
-                    : `${postTitle} | Wiki Bloc`;
-
-                setOrUpdateMeta(data.metadata, 'title', pageTitle);
-                setOrUpdateMeta(data.metadata, 'og:title', postTitle);
-                setOrUpdateMeta(data.metadata, 'twitter:title', postTitle);
-
-                const rawContent = singleBlog.getString(isClimbing ? 'content' : 'content1') || '';
-                const previewText = extractPreviewText(rawContent);
-                const metaDescription = previewText.slice(0, 160) || (isClimbing ? 'Climbing journal log by Justin Kim.' : 'Blog post by Justin Kim.');
-
-                setOrUpdateMeta(data.metadata, 'description', metaDescription);
-                setOrUpdateMeta(data.metadata, 'og:description', metaDescription);
-                setOrUpdateMeta(data.metadata, 'twitter:description', metaDescription);
-
-                // URL metadata
-                setOrUpdateMeta(data.metadata, 'url', canonicalUrl);
-                setOrUpdateMeta(data.metadata, 'og:url', canonicalUrl);
-                setOrUpdateMeta(data.metadata, 'twitter:url', canonicalUrl);
-
-                // Type & site name
-                setOrUpdateMeta(data.metadata, 'og:type', 'article');
-                setOrUpdateMeta(data.metadata, 'og:site_name', 'Wiki Bloc');
-                setOrUpdateMeta(data.metadata, 'og:locale', 'en_CA');
-
-                // Image handling
-                const rawImgUrl = getImageUrl(singleBlog);
-                const ogImageUrl = rawImgUrl ? `${rawImgUrl}?thumb=1200x630` : `${getBaseUrl()}/og-image.png`;
-                const coverAlt = singleBlog.getString('coverImageAlt') || postTitle || 'Blog post cover image';
-                const isWebp = ogImageUrl.includes('.webp');
-                const isJpg = ogImageUrl.includes('.jpg') || ogImageUrl.includes('.jpeg');
-                const mimeType = isWebp ? 'image/webp' : (isJpg ? 'image/jpeg' : 'image/png');
-
-                setOrUpdateMeta(data.metadata, 'og:image', ogImageUrl);
-                setOrUpdateMeta(data.metadata, 'og:image:secure_url', ogImageUrl);
-                setOrUpdateMeta(data.metadata, 'og:image:type', mimeType);
-                setOrUpdateMeta(data.metadata, 'twitter:image', ogImageUrl);
-                setOrUpdateMeta(data.metadata, 'og:image:alt', coverAlt);
-                setOrUpdateMeta(data.metadata, 'og:image:width', '1200');
-                setOrUpdateMeta(data.metadata, 'og:image:height', '630');
-
-                // Robots & Crawlers
-                setOrUpdateMeta(data.metadata, 'robots', 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
-
-                // Twitter Card
-                setOrUpdateMeta(data.metadata, 'twitter:card', 'summary_large_image');
-                setOrUpdateMeta(data.metadata, 'twitter:site', '@MatchaLatteTea');
-                setOrUpdateMeta(data.metadata, 'twitter:creator', '@MatchaLatteTea');
-
-                // Author & Publisher
-                setOrUpdateMeta(data.metadata, 'author', 'Justin Kim');
-                setOrUpdateMeta(data.metadata, 'article:author', 'https://www.justink.dev');
-                setOrUpdateMeta(data.metadata, 'article:author:name', 'Justin Kim');
-                setOrUpdateMeta(data.metadata, 'article:publisher', 'https://www.justink.dev/');
-                setOrUpdateMeta(data.metadata, 'article:section', isClimbing ? 'Climbing' : 'Software Development');
-
-                // Dates
-                const publishedDate = isClimbing
-                    ? singleBlog.getString('date') || singleBlog.getString('created')
-                    : singleBlog.getString('manualPublishDate') || singleBlog.getString('created');
-                if (publishedDate) {
-                    setOrUpdateMeta(data.metadata, 'article:published_time', new Date(publishedDate).toISOString());
-                }
-
-                const updatedDate = singleBlog.getString('updated');
-                if (updatedDate) {
-                    setOrUpdateMeta(data.metadata, 'article:modified_time', new Date(updatedDate).toISOString());
-                }
-
-                // Tags & Keywords
-                // Remove previous article:tag entries in place to prevent duplicates
-                for (let i = data.metadata.length - 1; i >= 0; i--) {
-                    if (data.metadata[i].name === 'article:tag') {
-                        data.metadata.splice(i, 1);
-                    }
-                }
-
-                let tagsList = [];
-                if (isClimbing) {
-                    const climbType = singleBlog.getString('climbType');
-                    const grade = singleBlog.getString('grade');
-                    const style = singleBlog.getString('style');
-                    const location = singleBlog.getString('location');
-                    tagsList = [climbType, grade, style, location].filter(Boolean);
-                } else {
-                    const blogTags = singleBlog.getString('tags');
-                    if (blogTags && blogTags.length > 0) {
-                        tagsList = blogTags.split(';').map(t => t.trim()).filter(Boolean);
-                    }
-                }
-
-                tagsList.forEach((tag) => {
-                    data.metadata.push({ name: 'article:tag', content: tag });
-                });
-                if (tagsList.length > 0) {
-                    setOrUpdateMeta(data.metadata, 'keywords', tagsList.join(', '));
-                }
-
-                trackGAEvent('view_item', {
-                    event_category: isClimbing ? 'climbing_engagement' : 'blog_engagement',
-                    item_id: singleBlog.id,
-                    item_name: postTitle,
-                    item_category: isClimbing ? (singleBlog.getString('climbType') || '') : (singleBlog.getString('tags') || ''),
-                    author: 'Justin K'
-                }, req);
-            } catch (err) {
-                console.error('Error preparing single blog view metadata: ', err);
-            }
-        }
-
-        // Assemble view-model for rendering
-        const coverImageAlt = singleBlog.getString('coverImageAlt');
-        const imageUrl = isClimbing
-            ? (getImageUrl(singleBlog) ? `${getImageUrl(singleBlog)}?thumb=1000x0` : '/background.webp')
-            : (getImageUrl(singleBlog) ? `${getImageUrl(singleBlog)}?thumb=1000x0` : (coverImageAlt || null));
-
-        let badges = [];
-        if (isClimbing) {
-            if (singleBlog.getString('climbType')) badges.push({ text: singleBlog.getString('climbType'), query: singleBlog.getString('climbType').trim() });
-            if (singleBlog.getString('grade')) badges.push({ text: singleBlog.getString('grade'), query: singleBlog.getString('grade').trim() });
-            if (singleBlog.getString('style')) badges.push({ text: singleBlog.getString('style'), query: singleBlog.getString('style').trim() });
-            if (singleBlog.getString('location')) badges.push({ text: singleBlog.getString('location'), query: singleBlog.getString('location').trim(), isLocation: true });
-        } else {
-            const pageTags = singleBlog.getString('tags');
-            if (pageTags && pageTags.length > 0) {
-                pageTags.split(';').forEach(tag => {
-                    const t = tag.trim();
-                    if (t) badges.push({ text: t, query: t });
-                });
-            }
-        }
-
-        const dateRaw = isClimbing
-            ? (singleBlog.getString('date') || singleBlog.getString('created'))
-            : (singleBlog.getString('manualPublishDate') || singleBlog.getString('created'));
-        const formattedDate = formatDateTime(new Date(dateRaw));
-
-        const updatedRaw = singleBlog.getString('updated');
-        const formattedUpdated = updatedRaw ? formatDateTime(new Date(updatedRaw)) : null;
-
-        const cleanContent = toNoCookie(isClimbing ? singleBlog.getString('content') : singleBlog.getString('content1'));
-        const cleanContent2 = !isClimbing && singleBlog.getString('content2') ? toNoCookie(singleBlog.getString('content2')) : null;
-
-        viewModel = {
-            id: singleBlog.id,
-            rawBlog: singleBlog,
-            title: singleBlog.getString('title'),
-            imageUrl,
-            badges,
-            isClimbing,
-            formattedDate,
-            formattedUpdated,
-            cleanContent,
-            cleanContent2,
-            backLink: isClimbing ? '/climbing' : '/blog/posts',
-            backLabel: isClimbing ? 'More Climbing' : 'More Dev Posts',
-            dateLabel: isClimbing ? 'Logged' : 'Posted'
-        };
-    }
-
-    return viewModel;
 }
 
 /**
@@ -1671,7 +1284,7 @@ function formatNumberWithCommas(num) {
 }
 
 /**
- * Build canonical Area URL (/area/:slug/:id) matching blog/climbing routes
+ * Build canonical Area URL (/area/:slug/:id)
  * @param {string} id
  * @param {string} name
  * @returns {string}
@@ -2189,7 +1802,6 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
 
 module.exports = {
     formatDateTime,
-    getImageUrl,
     getZendeskUrl,
     isJustinsTicket,
     isSlaBreaching,
@@ -2218,12 +1830,9 @@ module.exports = {
     isTicketCreated,
     slugifyTitle,
     trackGAEvent,
-    prepareBlogPostsViewData,
-    prepareBlogSingleViewData,
     sanitizeSearchTerm,
     extractPreviewText,
     toNoCookie,
-    formatPostViewModel,
     setOrUpdateMeta,
     sanitizeRedirectPath,
     getAuthenticatedUser,

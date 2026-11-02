@@ -832,10 +832,10 @@ for t in (payload.get('ticks') or []):
     user_prof = t.get('user') or {}
     cur.execute("""
         INSERT OR REPLACE INTO ticks (
-            id, openbetaId, user, openbetaUserId, climb, climbUuid, climbingPost,
+            id, openbetaId, user, openbetaUserId, climb, climbUuid,
             name, dateClimbed, style, attemptType, grade, notes, source,
             userProfile, isDeleted, created, updated
-        ) VALUES (?, ?, '', ?, ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        ) VALUES (?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
     """, (
         rec_id,
         ob_id,

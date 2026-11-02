@@ -113,9 +113,6 @@ module.exports = function (api) {
             },
         ],
         theme: cookieValue,
-        navigation: [
-            // { title: 'Climbing', url: '/climbing' },
-            // { title: 'Development', url: '/blog/posts' }
-        ]
+        navigation: []
     }
 }

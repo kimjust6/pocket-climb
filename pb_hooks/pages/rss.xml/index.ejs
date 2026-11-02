@@ -1,31 +1,28 @@
 <script server>
-  const { slugifyTitle } = require(`${__hooks}/pages/utils/common.js`)
-  const { getAllBlogPosts } = require(`${__hooks}/pages/utils/pocket.js`)
-  const blogposts = getAllBlogPosts("-manualPublishDate,-updated")
+  const { buildAreaUrl } = require(`${__hooks}/pages/utils/common.js`)
+  const { getAreas } = require(`${__hooks}/pages/utils/pocket.js`)
+  const areasPage = getAreas(1, 50, "")
+  const areas = areasPage.items || []
 
   const buildDate = new Date().toUTCString()
   const description = "An open source community drive wiki that provides information on climbs"
 
-  const items = blogposts.map(post => {
-    const pubDate = new Date(post.getString('manualPublishDate') || post.getString('created')).toUTCString()
-    const postLink = `https://wiki-bloc.jkim.win/blog/posts/${encodeURIComponent(slugifyTitle(post.getString('title')))}/${post.id}`
-    const content1 = post.getString('content1') || ''
-    const content2 = post.getString('content2') || ''
-    const postDesc = content1
-      .replace(/<[^>]*>/g, '') // Strip HTML
-      .substring(0, 300) // Truncate
-      + (content1.length > 300 ? '...' : '')
-
-    const fullContent = content1 + content2
+  const items = areas.map(area => {
+    const pubDate = new Date(area.getString('updated') || area.getString('created') || Date.now()).toUTCString()
+    const areaLink = `https://wiki-bloc.jkim.win${buildAreaUrl(area.id, area.getString('name'))}`
+    const rawDesc = area.getString('description') || `Explore ${area.getInt('totalClimbs') || 0} climbs in ${area.getString('name')}.`
+    const areaDesc = rawDesc
+      .replace(/<[^>]*>/g, '')
+      .substring(0, 300)
+      + (rawDesc.length > 300 ? '...' : '')
 
     return `
     <item>
-      <title><![CDATA[${post.getString('title')}]]></title>
-      <link>${postLink}</link>
-      <guid>${postLink}</guid>
+      <title><![CDATA[${area.getString('name')}]]></title>
+      <link>${areaLink}</link>
+      <guid>${areaLink}</guid>
       <pubDate>${pubDate}</pubDate>
-      <description><![CDATA[${postDesc}]]></description>
-      <content:encoded><![CDATA[${fullContent}]]></content:encoded>
+      <description><![CDATA[${areaDesc}]]></description>
     </item>`
   }).join('')
 

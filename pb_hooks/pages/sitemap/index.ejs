@@ -1,7 +1,6 @@
 <script server>
-  const { slugifyTitle } = require(`${__hooks}/pages/utils/common.js`)
-  const { getAllBlogPosts, getAllClimbingLogs } = require(`${__hooks}/pages/utils/pocket.js`)
-  const blogposts = getAllBlogPosts("-updated")
-  const climbingposts = getAllClimbingLogs("-date")
+  const { buildAreaUrl } = require(`${__hooks}/pages/utils/common.js`)
+  const { getAllActiveAreas } = require(`${__hooks}/pages/utils/pocket.js`)
+  const areas = getAllActiveAreas()
 </script>
-<%- include('../_private/sitemap-content.ejs', { blogposts, climbingposts, slugifyTitle }) %>
+<%- include('../_private/sitemap-content.ejs', { areas, buildAreaUrl }) %>

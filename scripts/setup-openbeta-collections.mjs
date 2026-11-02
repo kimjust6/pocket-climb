@@ -119,22 +119,6 @@ async function main() {
     }
 
     const usersCol = await pb.collections.getOne('users')
-    let climbingPostsCol = await pb.collections.getOne('climbing_posts')
-
-    // Ensure `climbing_posts` also has a `coordinates` geoPoint field
-    const hasCoordsOnClimbingPosts = (climbingPostsCol.fields || []).some(
-        (f) => f.name === 'coordinates'
-    )
-    if (!hasCoordsOnClimbingPosts) {
-        const updatedClimbingPostsFields = [
-            ...(climbingPostsCol.fields || []),
-            { name: 'coordinates', type: 'geoPoint', required: false },
-        ]
-        climbingPostsCol = await pb.collections.update(climbingPostsCol.id, {
-            fields: updatedClimbingPostsFields,
-        })
-        console.log('Added coordinates (geoPoint) field to climbing_posts')
-    }
 
     // 1. Create/Update `areas` (initially without self-relation if not yet created)
     const baseAreasFields = [
@@ -355,15 +339,6 @@ async function main() {
             required: false,
         },
         { name: 'climbUuid', type: 'text', required: false },
-        {
-            name: 'climbingPost',
-            type: 'relation',
-            collectionId: climbingPostsCol.id,
-            cascadeDelete: false,
-            minSelect: 0,
-            maxSelect: 1,
-            required: false,
-        },
         { name: 'name', type: 'text', required: false, presentable: true },
         { name: 'dateClimbed', type: 'date', required: true },
         {

@@ -195,14 +195,14 @@
                                         <div class="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
                                             <% if (climb.allGrades && climb.allGrades.length > 0) { %>
                                                 <% climb.allGrades.forEach((g, gIdx) => { %>
-                                                    <a href="/climbing?query=<%= encodeURIComponent(g.value) %>"
+                                                    <a href="/?query=<%= encodeURIComponent(g.value) %>"
                                                         class="badge <%= gIdx === 0 ? 'badge-accent font-bold' : 'badge-outline border-accent/40 text-base-content/80 badge-sm' %> font-mono no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer"
                                                         title="<%= g.system %> Grade">
                                                         <%= g.value %>
                                                     </a>
                                                 <% }); %>
                                             <% } else if (climb.primaryGrade) { %>
-                                                <a href="/climbing?query=<%= encodeURIComponent(climb.primaryGrade) %>"
+                                                <a href="/?query=<%= encodeURIComponent(climb.primaryGrade) %>"
                                                     class="badge badge-accent font-mono font-bold no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer">
                                                     <%= climb.primaryGrade %>
                                                 </a>
@@ -217,7 +217,7 @@
 
                                     <div class="flex flex-wrap items-center gap-2 mt-3">
                                         <% (climb.disciplines || []).forEach(disc => { %>
-                                            <a href="/climbing?query=<%= encodeURIComponent(disc) %>"
+                                            <a href="/?query=<%= encodeURIComponent(disc) %>"
                                                 class="badge badge-sm bg-base-100/70 border border-accent/30 text-base-content uppercase text-[10px] tracking-wider no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer">
                                                 <%= disc %>
                                             </a>

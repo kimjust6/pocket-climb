@@ -13,9 +13,7 @@ export const Collections = {
 	Superusers: "_superusers",
 	AdminSettings: "admin_settings",
 	Areas: "areas",
-	BlogPosts: "blog_posts",
 	ClimbMedia: "climb_media",
-	ClimbingPosts: "climbing_posts",
 	Climbs: "climbs",
 	Huggies: "huggies",
 	Organizations: "organizations",
@@ -303,7 +301,6 @@ export type TicksRecord<TuserProfile = unknown> = {
 	attemptType?: TicksAttemptTypeOptions
 	climb?: RecordIdString
 	climbUuid?: string
-	climbingPost?: RecordIdString
 	created: IsoAutoDateString
 	dateClimbed: IsoDateString
 	grade?: string
@@ -370,53 +367,6 @@ export type ClimbMediaRecord<TentityTags = unknown, TuserProfile = unknown> = {
 	width?: number
 }
 
-export type BlogPostsRecord = {
-	content1?: HTMLString
-	content2?: HTMLString
-	coverImage?: FileNameString
-	coverImageAlt?: string
-	created: IsoAutoDateString
-	id: string
-	isDeleted?: boolean
-	manualPublishDate?: IsoDateString
-	tags?: string
-	title?: string
-	updated: IsoAutoDateString
-	user?: RecordIdString
-}
-
-export const ClimbingPostsClimbTypeOptions = {
-	"Bouldering": "Bouldering",
-	"Sport": "Sport",
-	"Top Rope": "Top Rope",
-	"Trad": "Trad",
-} as const
-export type ClimbingPostsClimbTypeOptions = typeof ClimbingPostsClimbTypeOptions[keyof typeof ClimbingPostsClimbTypeOptions]
-
-export const ClimbingPostsStyleOptions = {
-	"Send": "Send",
-	"Flash": "Flash",
-	"Onsight": "Onsight",
-	"Project": "Project",
-	"Hangdog": "Hangdog",
-} as const
-export type ClimbingPostsStyleOptions = typeof ClimbingPostsStyleOptions[keyof typeof ClimbingPostsStyleOptions]
-export type ClimbingPostsRecord = {
-	climbType?: ClimbingPostsClimbTypeOptions
-	content?: HTMLString
-	coordinates?: GeoPoint
-	coverImage?: FileNameString
-	created: IsoAutoDateString
-	date: IsoDateString
-	grade?: string
-	id: string
-	isDeleted?: boolean
-	location?: string
-	style?: ClimbingPostsStyleOptions
-	title: string
-	updated: IsoAutoDateString
-}
-
 export type HuggiesRecord = {
 	created: IsoAutoDateString
 	description?: string
@@ -458,9 +408,7 @@ export type AreasResponse<
 	Tpolygon = unknown,
 	Texpand = unknown
 > = Required<AreasRecord<Taggregate, Tancestors, TauthorMetadata, Tbbox, Tcontent, Tmetadata, TpathTokens, Tpolygon>> & BaseSystemFields<Texpand>
-export type BlogPostsResponse<Texpand = unknown> = Required<BlogPostsRecord> & BaseSystemFields<Texpand>
 export type ClimbMediaResponse<TentityTags = unknown, TuserProfile = unknown, Texpand = unknown> = Required<ClimbMediaRecord<TentityTags, TuserProfile>> & BaseSystemFields<Texpand>
-export type ClimbingPostsResponse<Texpand = unknown> = Required<ClimbingPostsRecord> & BaseSystemFields<Texpand>
 export type ClimbsResponse<
 	Tancestors = unknown,
 	TauthorMetadata = unknown,
@@ -493,9 +441,7 @@ export type CollectionRecords = {
 	_superusers: SuperusersRecord
 	admin_settings: AdminSettingsRecord
 	areas: AreasRecord
-	blog_posts: BlogPostsRecord
 	climb_media: ClimbMediaRecord
-	climbing_posts: ClimbingPostsRecord
 	climbs: ClimbsRecord
 	huggies: HuggiesRecord
 	organizations: OrganizationsRecord
@@ -512,9 +458,7 @@ export type CollectionResponses = {
 	_superusers: SuperusersResponse
 	admin_settings: AdminSettingsResponse
 	areas: AreasResponse
-	blog_posts: BlogPostsResponse
 	climb_media: ClimbMediaResponse
-	climbing_posts: ClimbingPostsResponse
 	climbs: ClimbsResponse
 	huggies: HuggiesResponse
 	organizations: OrganizationsResponse

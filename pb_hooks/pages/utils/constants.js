@@ -1,5 +1,3 @@
-const POCKET_BLOGPOSTS = "blog_posts"
-const POCKET_CLIMBING_POSTS = "climbing_posts"
 const POCKET_AREAS = "areas"
 const POCKET_CLIMBS = "climbs"
 const POCKET_PITCHES = "pitches"
@@ -90,8 +88,6 @@ const COLLECTION_ENDPOINT_BASE_URL = "https://map.toronto.ca/cotgeocoder/rest/ge
 const COLLECTION_SUGGEST_URL = "https://map.toronto.ca/cotgeocoder/rest/geocoder/suggest";
 
 module.exports = {
-    POCKET_BLOGPOSTS,
-    POCKET_CLIMBING_POSTS,
     POCKET_AREAS,
     POCKET_CLIMBS,
     POCKET_PITCHES,
