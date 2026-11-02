@@ -1,4 +1,9 @@
-require('pocketpages')
+const pp = require('pocketpages')
+try {
+    if (typeof $app !== 'undefined' && $app.store && $app.store().get('pocketpages')) {
+        pp.AfterBootstrapHandler()
+    }
+} catch (_) {}
 
 // General 404 handler for routes that do not resolve to any valid page
 routerUse((e) => {

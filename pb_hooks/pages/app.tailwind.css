@@ -137,6 +137,17 @@ input::-ms-reveal {
     display: none !important;
 }
 
+/* Keep browser autofill inputs consistent with theme base-100 & base-content */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus,
+input:-webkit-autofill:active {
+    -webkit-box-shadow: 0 0 0 1000px oklch(var(--b1)) inset !important;
+    -webkit-text-fill-color: oklch(var(--bc)) !important;
+    caret-color: oklch(var(--bc)) !important;
+    transition: background-color 5000s ease-in-out 0s;
+}
+
 /* View Transitions API */
 @view-transition {
     navigation: auto;
