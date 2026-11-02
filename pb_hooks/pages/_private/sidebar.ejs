@@ -10,6 +10,18 @@
                     </a>
                 </li>
                 <% }); %>
+            <li class="mt-2 pt-2 border-t border-base-content/10">
+                <% if (data.user) { %>
+                    <a href="/logout" onclick="const d = document.getElementById('my-drawer-3'); if (d) d.checked = false;">
+                        Logout (<%= data.user.displayName %>)
+                    </a>
+                <% } else { %>
+                    <% const loginUrl = (data.currentPath && data.currentPath !== '/' && !data.currentPath.startsWith('/login')) ? `/login?redirect=${encodeURIComponent(data.currentPath)}` : '/login'; %>
+                    <a href="<%= loginUrl %>" onclick="const d = document.getElementById('my-drawer-3'); if (d) d.checked = false;">
+                        Login
+                    </a>
+                <% } %>
+            </li>
         </ul>
     </nav>
 </div>

@@ -1,5 +1,8 @@
 const POCKET_BLOGPOSTS = "blog_posts"
 const POCKET_CLIMBING_POSTS = "climbing_posts"
+const POCKET_USERS = "users"
+const AUTH_COOKIE_NAME = "pb_auth"
+const AUTH_COOKIE_MAX_AGE = 60 * 60 * 24 * 14 // 14 days
 const POCKET_ZENDESKUSER_DISCORDUSER = "zendeskuser_discorduser"
 const POCKET_SLA_BREACHING_SOON = "nearing_sla_breach_notified"
 const DISCORD_API_ENDPOINT = "https://zen.jkim.win/api/discord/send-dm/";
@@ -82,6 +85,9 @@ const COLLECTION_SUGGEST_URL = "https://map.toronto.ca/cotgeocoder/rest/geocoder
 module.exports = {
     POCKET_BLOGPOSTS,
     POCKET_CLIMBING_POSTS,
+    POCKET_USERS,
+    AUTH_COOKIE_NAME,
+    AUTH_COOKIE_MAX_AGE,
     POCKET_ZENDESKUSER_DISCORDUSER,
     POCKET_SLA_BREACHING_SOON,
     DISCORD_API_ENDPOINT,

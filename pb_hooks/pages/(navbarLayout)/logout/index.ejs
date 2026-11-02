@@ -1,0 +1,10 @@
+<script server>
+    const { clearAuthCookie, sanitizeRedirectPath } = require(`${__hooks}/pages/utils/common.js`)
+
+    clearAuthCookie(response)
+    const redirectTo = sanitizeRedirectPath(params?.redirect || '/')
+    if (response && typeof response.redirect === 'function') {
+        response.redirect(redirectTo, 302)
+    }
+</script>
+

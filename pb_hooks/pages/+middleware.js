@@ -1,5 +1,6 @@
 /** @type {import('pocketpages').MiddlewareLoaderFunc} */
 module.exports = function (api) {
+    const { getAuthenticatedUser } = require(`${__hooks}/pages/utils/common.js`);
     let cookieValue = 'dark';
     try {
         // api.request.cookies is a function in the JS bridge
@@ -20,20 +21,22 @@ module.exports = function (api) {
         if (api.request?.url?.pathname) {
             pathname = api.request.url.pathname;
         }
-    } catch (_) {}
+    } catch (_) { }
 
     try {
         if (api.response?.header) {
             api.response.header('Cache-Control', 'no-cache, private, must-revalidate');
             api.response.header('Vary', 'Cookie');
         }
-    } catch (_) {}
+    } catch (_) { }
 
-    const baseUrl = 'https://www.jkim.win';
+    const baseUrl = 'https://wiki-bloc.jkim.win/';
     const pageUrl = pathname === '/' ? `${baseUrl}/` : `${baseUrl}${pathname}`;
+    const user = getAuthenticatedUser(api.request);
 
     return {
         currentPath: pathname,
+        user,
         metadata: [
             // Basic metadata
             {

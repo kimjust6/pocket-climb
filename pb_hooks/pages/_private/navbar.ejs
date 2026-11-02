@@ -23,6 +23,21 @@
                 <%= item.title %>
             </a>
             <% }); %>
+        <% if (data.user) { %>
+            <span class="badge bg-base-100/60 backdrop-blur-md border border-accent/30 text-base-content badge-sm font-medium">
+                <%= data.user.displayName %>
+            </span>
+            <a href="/logout"
+                class="font-medium hover:text-secondary transition-colors duration-200 no-underline text-base-content">
+                Logout
+            </a>
+        <% } else { %>
+            <% const loginUrl = (data.currentPath && data.currentPath !== '/' && !data.currentPath.startsWith('/login')) ? `/login?redirect=${encodeURIComponent(data.currentPath)}` : '/login'; %>
+            <a href="<%= loginUrl %>"
+                class="font-medium hover:text-secondary transition-colors duration-200 no-underline <%= data.currentPath === '/login' ? 'text-accent' : 'text-base-content' %>">
+                Login
+            </a>
+        <% } %>
     </div>
     <div class="flex-none ml-2">
         <button onclick="toggleTheme()"

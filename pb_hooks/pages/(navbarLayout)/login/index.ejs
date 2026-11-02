@@ -1,0 +1,432 @@
+<script server>
+    const { prepareLoginPageViewData } = require(`${__hooks}/pages/utils/common.js`)
+    const loginView = prepareLoginPageViewData(api, data)
+</script>
+
+<% if (!loginView.redirected) { %>
+<%
+    const redirectQuery = loginView.redirectTo && loginView.redirectTo !== '/'
+        ? `&redirect=${encodeURIComponent(loginView.redirectTo)}`
+        : '';
+    const loginHref = `/login?mode=login${redirectQuery}`;
+    const registerHref = `/login?mode=register${redirectQuery}`;
+    const forgotHref = `/login?mode=forgot${redirectQuery}`;
+%>
+<section class="not-prose bg-base-100 min-h-[calc(100vh-12.54rem)] flex items-center justify-center py-12 px-4 sm:px-6">
+    <div class="w-full max-w-md">
+        <div class="card dark:bg-base-300/70 bg-base-300/60 backdrop-blur-xl shadow-xl rounded-xl border border-secondary/20">
+            <div class="card-body p-6 sm:p-8 gap-5">
+                <!-- Header -->
+                <div class="text-center space-y-1.5">
+                    <% if (loginView.mode === 'register') { %>
+                        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-accent">Create an Account</h1>
+                        <p class="text-sm text-base-content">Join The Justin Blog community</p>
+                    <% } else if (loginView.mode === 'forgot') { %>
+                        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-accent">Reset Password</h1>
+                        <p class="text-sm text-base-content">Enter your email and we'll send you a reset link</p>
+                    <% } else { %>
+                        <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-accent">Welcome Back</h1>
+                        <p class="text-sm text-base-content">Sign in to your account to continue</p>
+                    <% } %>
+                </div>
+
+                <!-- Mode Tabs (Sign In / Sign Up) -->
+                <% if (loginView.mode !== 'forgot') { %>
+                <div role="tablist" class="grid grid-cols-2 gap-1 bg-base-100/60 border border-secondary/20 rounded-xl p-1">
+                    <a
+                        href="<%= loginHref %>"
+                        role="tab"
+                        aria-selected="<%= loginView.mode === 'login' ? 'true' : 'false' %>"
+                        class="btn btn-sm border-none font-medium transition-all duration-200 no-underline <%= loginView.mode === 'login' ? 'btn-primary shadow-sm' : 'btn-ghost text-base-content hover:text-secondary' %>"
+                    >
+                        Sign In
+                    </a>
+                    <a
+                        href="<%= registerHref %>"
+                        role="tab"
+                        aria-selected="<%= loginView.mode === 'register' ? 'true' : 'false' %>"
+                        class="btn btn-sm border-none font-medium transition-all duration-200 no-underline <%= loginView.mode === 'register' ? 'btn-primary shadow-sm' : 'btn-ghost text-base-content hover:text-secondary' %>"
+                    >
+                        Sign Up
+                    </a>
+                </div>
+                <% } %>
+
+                <!-- Error / Success Alerts -->
+                <div id="oauth-error-alert" class="alert alert-error text-sm py-3 hidden" role="alert">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span id="oauth-error-text"></span>
+                </div>
+
+                <% if (loginView.errorMessage) { %>
+                <div class="alert alert-error text-sm py-3" role="alert">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span><%= loginView.errorMessage %></span>
+                </div>
+                <% } %>
+
+                <% if (loginView.successMessage) { %>
+                <div class="alert alert-success text-sm py-3" role="status">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 shrink-0 stroke-current" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span><%= loginView.successMessage %></span>
+                </div>
+                <% } %>
+
+                <% if (loginView.mode === 'login') { %>
+                <!-- Sign In Form -->
+                <form method="POST" action="/login" class="space-y-4">
+                    <input type="hidden" name="action" value="login" />
+                    <input type="hidden" name="redirect" value="<%= loginView.redirectTo %>" />
+
+                    <div class="form-control w-full">
+                        <label class="label pb-1.5" for="login-identity">
+                            <span class="label-text font-medium text-base-content">Email or Username</span>
+                        </label>
+                        <input
+                            id="login-identity"
+                            name="identity"
+                            type="text"
+                            autocomplete="username"
+                            required
+                            value="<%= loginView.formValues.identity %>"
+                            placeholder="you@example.com"
+                            class="input input-bordered w-full bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                        />
+                    </div>
+
+                    <div class="form-control w-full">
+                        <div class="flex items-center justify-between pb-1.5">
+                            <label class="label p-0" for="login-password">
+                                <span class="label-text font-medium text-base-content">Password</span>
+                            </label>
+                            <a href="<%= forgotHref %>" class="text-xs font-medium text-base-content hover:text-secondary transition-colors duration-200 no-underline">
+                                Forgot password?
+                            </a>
+                        </div>
+                        <div class="relative">
+                            <input
+                                id="login-password"
+                                name="password"
+                                type="password"
+                                autocomplete="current-password"
+                                required
+                                placeholder="••••••••"
+                                class="input input-bordered w-full pr-11 bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                            />
+                            <button
+                                type="button"
+                                onclick="togglePasswordVisibility('login-password', 'eye-icon-login')"
+                                class="btn btn-ghost btn-xs btn-circle absolute right-2 top-1/2 -translate-y-1/2 opacity-70 hover:opacity-100 text-base-content"
+                                aria-label="Toggle password visibility"
+                            >
+                                <svg id="eye-icon-login" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="flex items-center justify-between pt-1">
+                        <label class="label cursor-pointer justify-start gap-2.5 p-0">
+                            <input
+                                type="checkbox"
+                                name="remember"
+                                value="true"
+                                <%= loginView.formValues.remember ? 'checked' : '' %>
+                                class="checkbox checkbox-primary checkbox-sm"
+                            />
+                            <span class="label-text text-sm text-base-content">Remember me for 14 days</span>
+                        </label>
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full font-semibold mt-2">
+                        Sign In
+                    </button>
+                </form>
+
+                <% } else if (loginView.mode === 'register') { %>
+                <!-- Sign Up Form -->
+                <form method="POST" action="/login" class="space-y-4">
+                    <input type="hidden" name="action" value="register" />
+                    <input type="hidden" name="redirect" value="<%= loginView.redirectTo %>" />
+                    <input type="hidden" name="remember" value="true" />
+
+                    <div class="form-control w-full">
+                        <label class="label pb-1.5" for="register-name">
+                            <span class="label-text font-medium text-base-content">Display Name <span class="text-base-content/60 font-normal">(optional)</span></span>
+                        </label>
+                        <input
+                            id="register-name"
+                            name="name"
+                            type="text"
+                            autocomplete="name"
+                            value="<%= loginView.formValues.name %>"
+                            placeholder="Justin Kim"
+                            class="input input-bordered w-full bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                        />
+                    </div>
+
+                    <div class="form-control w-full">
+                        <label class="label pb-1.5" for="register-email">
+                            <span class="label-text font-medium text-base-content">Email Address</span>
+                        </label>
+                        <input
+                            id="register-email"
+                            name="email"
+                            type="email"
+                            autocomplete="email"
+                            required
+                            value="<%= loginView.formValues.email %>"
+                            placeholder="you@example.com"
+                            class="input input-bordered w-full bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                        />
+                    </div>
+
+                    <div class="form-control w-full">
+                        <label class="label pb-1.5" for="register-password">
+                            <span class="label-text font-medium text-base-content">Password</span>
+                        </label>
+                        <div class="relative">
+                            <input
+                                id="register-password"
+                                name="password"
+                                type="password"
+                                autocomplete="new-password"
+                                minlength="8"
+                                required
+                                placeholder="At least 8 characters"
+                                class="input input-bordered w-full pr-11 bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                            />
+                            <button
+                                type="button"
+                                onclick="togglePasswordVisibility('register-password', 'eye-icon-register')"
+                                class="btn btn-ghost btn-xs btn-circle absolute right-2 top-1/2 -translate-y-1/2 opacity-70 hover:opacity-100 text-base-content"
+                                aria-label="Toggle password visibility"
+                            >
+                                <svg id="eye-icon-register" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-control w-full">
+                        <label class="label pb-1.5" for="register-password-confirm">
+                            <span class="label-text font-medium text-base-content">Confirm Password</span>
+                        </label>
+                        <input
+                            id="register-password-confirm"
+                            name="passwordConfirm"
+                            type="password"
+                            autocomplete="new-password"
+                            minlength="8"
+                            required
+                            placeholder="Repeat your password"
+                            class="input input-bordered w-full bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                        />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full font-semibold mt-2">
+                        Create Account
+                    </button>
+                </form>
+
+                <% } else if (loginView.mode === 'forgot') { %>
+                <!-- Forgot Password Form -->
+                <form method="POST" action="/login" class="space-y-4">
+                    <input type="hidden" name="action" value="forgot" />
+                    <input type="hidden" name="redirect" value="<%= loginView.redirectTo %>" />
+
+                    <div class="form-control w-full">
+                        <label class="label pb-1.5" for="forgot-email">
+                            <span class="label-text font-medium text-base-content">Email Address</span>
+                        </label>
+                        <input
+                            id="forgot-email"
+                            name="email"
+                            type="email"
+                            autocomplete="email"
+                            required
+                            value="<%= loginView.formValues.email %>"
+                            placeholder="you@example.com"
+                            class="input input-bordered w-full bg-base-100 border border-base-content/30 text-base-content placeholder:text-base-content/50 focus:outline-none focus:ring-2 focus:ring-primary shadow-sm"
+                        />
+                    </div>
+
+                    <button type="submit" class="btn btn-primary w-full font-semibold">
+                        Send Reset Link
+                    </button>
+                </form>
+                <% } %>
+
+                <!-- OAuth / Social Login Section -->
+                <% if (loginView.mode !== 'forgot') { %>
+                <div class="divider text-xs uppercase tracking-wider text-base-content/60 my-1">Or continue with</div>
+
+                <form id="oauth-token-form" method="POST" action="/login" class="hidden">
+                    <input type="hidden" name="action" value="oauth_token" />
+                    <input type="hidden" name="redirect" value="<%= loginView.redirectTo %>" />
+                    <input type="hidden" id="oauth-token-input" name="token" value="" />
+                    <input type="hidden" name="remember" value="true" />
+                </form>
+
+                <%
+                    const providers = (loginView.oauthProviders && loginView.oauthProviders.length > 0)
+                        ? loginView.oauthProviders
+                        : [
+                            { name: 'google', displayName: 'Google' },
+                            { name: 'github', displayName: 'GitHub' },
+                            { name: 'discord', displayName: 'Discord' }
+                        ];
+                    const gridColsClass = providers.length >= 3 ? 'grid-cols-3' : (providers.length === 2 ? 'grid-cols-2' : 'grid-cols-1');
+                %>
+                <div class="grid <%= gridColsClass %> gap-2.5">
+                    <% providers.forEach(function(provider) { %>
+                    <button
+                        type="button"
+                        onclick="startOAuthLogin('<%= provider.name %>')"
+                        class="btn bg-base-100/60 backdrop-blur-md border border-accent/30 shadow-md text-base-content hover:bg-accent hover:text-accent-content hover:border-accent font-medium gap-2 transition-all duration-200"
+                        aria-label="Continue with <%= provider.displayName %>"
+                    >
+                        <% if (provider.name === 'google') { %>
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M21.35 11.1h-9.17v2.73h6.51c-.33 3.81-3.5 5.44-6.5 5.44C8.36 19.27 5 16.25 5 12c0-4.1 3.2-7.27 7.2-7.27 3.09 0 4.9 1.97 4.9 1.97L19 4.72S16.56 2 12.1 2C6.42 2 2.03 6.8 2.03 12c0 5.05 4.13 10 10.22 10 5.35 0 9.25-3.67 9.25-9.09 0-1.15-.15-1.81-.15-1.81Z" />
+                        </svg>
+                        <% } else if (provider.name === 'github') { %>
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path fill-rule="evenodd" clip-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.53 1.032 1.53 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" />
+                        </svg>
+                        <% } else if (provider.name === 'discord') { %>
+                        <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                            <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028c.462-.63.874-1.295 1.226-1.994a.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
+                        </svg>
+                        <% } %>
+                        <span class="text-xs sm:text-sm"><%= provider.displayName %></span>
+                    </button>
+                    <% }); %>
+                </div>
+                <% } %>
+
+                <!-- Footer Links -->
+                <div class="text-center text-sm text-base-content pt-2 border-t border-base-content/10">
+                    <% if (loginView.mode === 'login') { %>
+                        Don't have an account?
+                        <a href="<%= registerHref %>" class="font-semibold text-secondary hover:text-accent transition-colors duration-200 ml-1 no-underline">
+                            Sign up
+                        </a>
+                    <% } else if (loginView.mode === 'register') { %>
+                        Already have an account?
+                        <a href="<%= loginHref %>" class="font-semibold text-secondary hover:text-accent transition-colors duration-200 ml-1 no-underline">
+                            Sign in
+                        </a>
+                    <% } else { %>
+                        Remember your password?
+                        <a href="<%= loginHref %>" class="font-semibold text-secondary hover:text-accent transition-colors duration-200 ml-1 no-underline">
+                            Back to sign in
+                        </a>
+                    <% } %>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+    function togglePasswordVisibility(inputId, iconId) {
+        const input = document.getElementById(inputId);
+        if (!input) return;
+        input.type = input.type === 'password' ? 'text' : 'password';
+    }
+
+    function showOAuthError(msg) {
+        const alertEl = document.getElementById('oauth-error-alert');
+        const textEl = document.getElementById('oauth-error-text');
+        if (alertEl && textEl) {
+            textEl.textContent = msg;
+            alertEl.classList.remove('hidden');
+        }
+    }
+
+    async function startOAuthLogin(providerName) {
+        try {
+            const res = await fetch('/api/collections/users/auth-methods');
+            if (!res.ok) {
+                showOAuthError('Unable to fetch authentication methods.');
+                return;
+            }
+            const methods = await res.json();
+            const providers = (methods.oauth2 && methods.oauth2.providers) || methods.authProviders || [];
+            const provider = providers.find((p) => p.name === providerName);
+            if (!provider) {
+                showOAuthError(`${providerName.charAt(0).toUpperCase() + providerName.slice(1)} OAuth2 is not enabled in PocketBase settings yet.`);
+                return;
+            }
+
+            try {
+                sessionStorage.setItem('pb_oauth_provider', JSON.stringify(provider));
+            } catch (_) {}
+
+            const redirectUrl = `${window.location.origin}/login`;
+            window.location.href = provider.authUrl + encodeURIComponent(redirectUrl);
+        } catch (err) {
+            showOAuthError('Could not start OAuth sign-in. Please try again.');
+        }
+    }
+
+    // Complete OAuth2 redirect callback if `code` and `state` are present in query params
+    (async function handleOAuthCallback() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const code = urlParams.get('code');
+        const state = urlParams.get('state');
+        if (!code || !state) return;
+
+        try {
+            const rawProvider = sessionStorage.getItem('pb_oauth_provider');
+            if (!rawProvider) return;
+            const provider = JSON.parse(rawProvider);
+            if (!provider || provider.state !== state) {
+                showOAuthError('OAuth state mismatch. Please try signing in again.');
+                return;
+            }
+
+            const redirectUrl = `${window.location.origin}/login`;
+            const authRes = await fetch('/api/collections/users/auth-with-oauth2', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    provider: provider.name,
+                    code,
+                    codeVerifier: provider.codeVerifier,
+                    redirectUrl
+                })
+            });
+
+            if (!authRes.ok) {
+                showOAuthError('Failed to exchange OAuth2 authorization code.');
+                return;
+            }
+
+            const authData = await authRes.json();
+            if (authData && authData.token) {
+                sessionStorage.removeItem('pb_oauth_provider');
+                const tokenInput = document.getElementById('oauth-token-input');
+                const form = document.getElementById('oauth-token-form');
+                if (tokenInput && form) {
+                    tokenInput.value = authData.token;
+                    form.submit();
+                }
+            }
+        } catch (_) {
+            showOAuthError('An error occurred while completing OAuth2 sign-in.');
+        }
+    })();
+</script>
+<% } %>

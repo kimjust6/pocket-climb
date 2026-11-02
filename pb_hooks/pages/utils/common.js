@@ -11,7 +11,9 @@ const {
     POCKET_COLLECTION_ZENDESK_ORGANIZATIONS,
     ZENDESK_STATUS_CHANGED_TYPE,
     ZENDESK_CLOSED_STATUS,
-    ZENDESK_TICKET_CREATED
+    ZENDESK_TICKET_CREATED,
+    AUTH_COOKIE_NAME,
+    AUTH_COOKIE_MAX_AGE
 } = require(`${__hooks}/pages/utils/constants.js`);
 
 
@@ -1346,6 +1348,318 @@ function extractPreviewText(html) {
     return clean.replace(/\s+/g, ' ').trim();
 }
 
+/**
+ * Sanitize a redirect target so it is always a safe internal relative path
+ * @param {string} redirectParam
+ * @returns {string}
+ */
+function sanitizeRedirectPath(redirectParam) {
+    if (!redirectParam || typeof redirectParam !== 'string') return '/';
+    const trimmed = redirectParam.trim();
+    if (!trimmed.startsWith('/') || trimmed.startsWith('//') || trimmed.includes('\\')) {
+        return '/';
+    }
+    if (trimmed.startsWith('/login') || trimmed.startsWith('/logout')) {
+        return '/';
+    }
+    return trimmed;
+}
+
+/**
+ * Extract the authenticated user from request cookies or request auth context
+ * @param {Object|null} req
+ * @returns {{ id: string, email: string, name: string, username: string, verified: boolean } | null}
+ */
+function getAuthenticatedUser(req) {
+    if (!req) return null;
+
+    try {
+        const { getAuthRecordFromToken } = require(`${__hooks}/pages/utils/pocket.js`);
+        let record = req.auth || req.event?.auth || null;
+
+        if (!record) {
+            let cookiesMap = null;
+            if (typeof req.cookies === 'function') {
+                cookiesMap = req.cookies();
+            } else if (req.cookies) {
+                cookiesMap = req.cookies;
+            }
+
+            const rawCookie = cookiesMap ? cookiesMap[AUTH_COOKIE_NAME] : null;
+            let token = null;
+            if (typeof rawCookie === 'string') {
+                token = rawCookie;
+            } else if (rawCookie && typeof rawCookie === 'object') {
+                token = rawCookie.token || rawCookie.value || null;
+            }
+
+            if (token) {
+                record = getAuthRecordFromToken(token);
+            }
+        }
+
+        if (!record || !record.id) return null;
+
+        const getStr = (field) => (typeof record.getString === 'function' ? record.getString(field) : (record[field] || ''));
+        const getBool = (field) => (typeof record.getBool === 'function' ? record.getBool(field) : Boolean(record[field]));
+
+        const email = getStr('email');
+        const name = getStr('name');
+        const username = getStr('username');
+        const displayName = name || username || (email ? email.split('@')[0] : 'User');
+
+        return {
+            id: record.id,
+            email,
+            name,
+            username,
+            displayName,
+            verified: getBool('verified')
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Set the server-side authentication cookie on the response
+ * @param {Object} response
+ * @param {string} token
+ * @param {boolean} rememberMe
+ */
+function setAuthCookie(response, token, rememberMe = true) {
+    if (!response || typeof response.cookie !== 'function' || !token) return;
+    const isSecure = getBaseUrl().startsWith('https://');
+    const cookieOpts = {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'Lax',
+        secure: isSecure
+    };
+    if (rememberMe) {
+        cookieOpts.maxAge = AUTH_COOKIE_MAX_AGE;
+    }
+    response.cookie(AUTH_COOKIE_NAME, token, cookieOpts);
+}
+
+/**
+ * Clear the server-side authentication cookie on the response
+ * @param {Object} response
+ */
+function clearAuthCookie(response) {
+    if (!response || typeof response.cookie !== 'function') return;
+    response.cookie(AUTH_COOKIE_NAME, '', {
+        path: '/',
+        httpOnly: true,
+        sameSite: 'Lax',
+        maxAge: 0
+    });
+}
+
+/**
+ * Prepare metadata, form handling, and view model for the /login page
+ * @param {Object} api - PocketPages request context
+ * @param {Object} data - Middleware data object
+ * @returns {Object} Login page view model
+ */
+function prepareLoginPageViewData(api, data = {}) {
+    const {
+        authenticateUserWithPassword,
+        getAuthRecordFromToken,
+        getOAuthProviders,
+        requestPasswordResetByEmail,
+        registerNewUser
+    } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    const req = api?.request || null;
+    const res = api?.response || null;
+    const params = api?.params || {};
+    const method = String(req?.method || 'GET').toUpperCase();
+
+    const rawBody = (() => {
+        try {
+            if (typeof api?.formData === 'function') return api.formData() || {};
+            if (api?.formData && typeof api.formData === 'object') return api.formData;
+            if (typeof req?.formData === 'function') return req.formData() || {};
+        } catch (_) {}
+        return {};
+    })();
+
+    const redirectTo = sanitizeRedirectPath(rawBody.redirect || params.redirect || '/');
+    const requestedMode = String(rawBody.action || params.mode || 'login').toLowerCase();
+    let mode = ['login', 'register', 'forgot'].includes(requestedMode) ? requestedMode : 'login';
+
+    let errorMessage = '';
+    let successMessage = '';
+    let formValues = {
+        identity: String(rawBody.identity || rawBody.email || '').trim(),
+        email: String(rawBody.email || rawBody.identity || '').trim(),
+        name: String(rawBody.name || '').trim(),
+        remember: rawBody.remember !== 'false' && rawBody.remember !== '0'
+    };
+
+    // If user is already logged in on GET, redirect them straight to their destination
+    const existingUser = data?.user || getAuthenticatedUser(req);
+    if (method === 'GET' && existingUser && !params.mode) {
+        if (res && typeof res.redirect === 'function') {
+            res.redirect(redirectTo, 302);
+        }
+        return {
+            redirected: true,
+            mode,
+            redirectTo,
+            errorMessage,
+            successMessage,
+            formValues,
+            oauthProviders: []
+        };
+    }
+
+    if (method === 'POST') {
+        const action = String(rawBody.action || 'login').toLowerCase();
+
+        if (action === 'oauth_token') {
+            const oauthToken = String(rawBody.token || '').trim();
+            const remember = rawBody.remember !== 'false' && rawBody.remember !== '0';
+            const record = getAuthRecordFromToken(oauthToken);
+            if (record) {
+                setAuthCookie(res, oauthToken, remember);
+                trackGAEvent('login', {
+                    method: 'oauth2',
+                    event_category: 'authentication'
+                }, req);
+                if (res && typeof res.redirect === 'function') {
+                    res.redirect(redirectTo, 302);
+                }
+                return {
+                    redirected: true,
+                    mode: 'login',
+                    redirectTo,
+                    errorMessage: '',
+                    successMessage: '',
+                    formValues,
+                    oauthProviders: []
+                };
+            } else {
+                mode = 'login';
+                errorMessage = 'OAuth sign-in failed or token expired. Please try again.';
+            }
+        } else if (action === 'register') {
+            mode = 'register';
+            const email = String(rawBody.email || '').trim();
+            const name = String(rawBody.name || '').trim();
+            const password = String(rawBody.password || '');
+            const passwordConfirm = String(rawBody.passwordConfirm || '');
+            const remember = Boolean(rawBody.remember);
+
+            if (!email || !password) {
+                errorMessage = 'Please provide both your email address and a password.';
+            } else if (password.length < 8) {
+                errorMessage = 'Password must be at least 8 characters long.';
+            } else if (password !== passwordConfirm) {
+                errorMessage = 'Passwords do not match.';
+            } else {
+                const regResult = registerNewUser({ email, password, name });
+                if (regResult.ok && regResult.token) {
+                    setAuthCookie(res, regResult.token, remember);
+                    trackGAEvent('sign_up', {
+                        method: 'password',
+                        event_category: 'authentication'
+                    }, req);
+                    if (res && typeof res.redirect === 'function') {
+                        res.redirect(redirectTo, 302);
+                    }
+                    return {
+                        redirected: true,
+                        mode,
+                        redirectTo,
+                        errorMessage: '',
+                        successMessage: '',
+                        formValues,
+                        oauthProviders: []
+                    };
+                } else {
+                    errorMessage = regResult.error || 'Could not create your account. Please try again.';
+                }
+            }
+        } else if (action === 'forgot') {
+            mode = 'forgot';
+            const email = String(rawBody.email || rawBody.identity || '').trim();
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+                errorMessage = 'Please enter a valid email address to reset your password.';
+            } else {
+                requestPasswordResetByEmail(email);
+                successMessage = 'If an account matches that email address, a password reset link has been sent.';
+            }
+        } else {
+            mode = 'login';
+            const identity = String(rawBody.identity || rawBody.email || '').trim();
+            const password = String(rawBody.password || '');
+            const remember = Boolean(rawBody.remember);
+
+            if (!identity || !password) {
+                errorMessage = 'Please enter your email or username and password.';
+            } else {
+                const authResult = authenticateUserWithPassword(identity, password);
+                if (authResult && authResult.token) {
+                    setAuthCookie(res, authResult.token, remember);
+                    trackGAEvent('login', {
+                        method: 'password',
+                        event_category: 'authentication'
+                    }, req);
+                    if (res && typeof res.redirect === 'function') {
+                        res.redirect(redirectTo, 302);
+                    }
+                    return {
+                        redirected: true,
+                        mode,
+                        redirectTo,
+                        errorMessage: '',
+                        successMessage: '',
+                        formValues,
+                        oauthProviders: []
+                    };
+                } else {
+                    errorMessage = 'Invalid email/username or password.';
+                }
+            }
+        }
+    }
+
+    if (data?.metadata) {
+        const pageTitle = mode === 'register'
+            ? 'Create Account | The Justin Blog'
+            : mode === 'forgot'
+                ? 'Reset Password | The Justin Blog'
+                : 'Sign In | The Justin Blog';
+        const pageDesc = 'Sign in to your account on The Justin Blog.';
+        const canonicalUrl = `${getBaseUrl()}/login`;
+
+        setOrUpdateMeta(data.metadata, 'title', pageTitle);
+        setOrUpdateMeta(data.metadata, 'og:title', pageTitle);
+        setOrUpdateMeta(data.metadata, 'twitter:title', pageTitle);
+        setOrUpdateMeta(data.metadata, 'description', pageDesc);
+        setOrUpdateMeta(data.metadata, 'og:description', pageDesc);
+        setOrUpdateMeta(data.metadata, 'twitter:description', pageDesc);
+        setOrUpdateMeta(data.metadata, 'url', canonicalUrl);
+        setOrUpdateMeta(data.metadata, 'og:url', canonicalUrl);
+        setOrUpdateMeta(data.metadata, 'twitter:url', canonicalUrl);
+        setOrUpdateMeta(data.metadata, 'robots', 'noindex, nofollow');
+    }
+
+    const oauthProviders = getOAuthProviders();
+
+    return {
+        redirected: false,
+        mode,
+        redirectTo,
+        errorMessage,
+        successMessage,
+        formValues,
+        oauthProviders
+    };
+}
+
 module.exports = {
     formatDateTime,
     getImageUrl,
@@ -1383,6 +1697,11 @@ module.exports = {
     extractPreviewText,
     toNoCookie,
     formatPostViewModel,
-    setOrUpdateMeta
+    setOrUpdateMeta,
+    sanitizeRedirectPath,
+    getAuthenticatedUser,
+    setAuthCookie,
+    clearAuthCookie,
+    prepareLoginPageViewData
 }
 
