@@ -246,9 +246,8 @@ async function main() {
                   ? ancestors[ancestors.length - 2]
                   : ''
         const parentUuid =
-            parentUuidOverride !== null
-                ? parentUuidOverride
-                : existing?.parentUuid || derivedParent
+            derivedParent ||
+            (parentUuidOverride !== null ? parentUuidOverride : existing?.parentUuid || '')
 
         collectedAreas.set(area.uuid, {
             uuid: area.uuid,

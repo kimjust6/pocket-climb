@@ -1469,7 +1469,23 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         .map((country) => {
             const dests = destinationsByGroupUuid[country.uuid] || [];
             const rawChildren = childrenByParentUuid[country.uuid] || [];
-            const locations = (dests.length > 0 ? dests : rawChildren).sort((a, b) =>
+            const seenLocUuids = {};
+            const mergedLocations = [];
+            for (let i = 0; i < rawChildren.length; i++) {
+                const rc = rawChildren[i];
+                if (rc.uuid && !seenLocUuids[rc.uuid]) {
+                    seenLocUuids[rc.uuid] = true;
+                    mergedLocations.push(rc);
+                }
+            }
+            for (let i = 0; i < dests.length; i++) {
+                const d = dests[i];
+                if (d.uuid && !seenLocUuids[d.uuid]) {
+                    seenLocUuids[d.uuid] = true;
+                    mergedLocations.push(d);
+                }
+            }
+            const locations = mergedLocations.sort((a, b) =>
                 b.totalClimbs - a.totalClimbs || a.name.localeCompare(b.name)
             );
             const filteredLocations = qLower

@@ -568,16 +568,16 @@ function getHomepageDirectoryAreas() {
             0
         ) || [];
 
-        const usaRoot = roots.find(
-            (r) => r.getString("shortCode") === "USA" || r.getString("name") === "USA"
-        );
-        const usaUuid = usaRoot ? usaRoot.getString("openbetaUuid") : "";
+        const rootUuids = roots
+            .map((r) => r.getString("openbetaUuid"))
+            .filter(Boolean);
 
         let filter = "isDeleted = false && (parentUuid = '' || isDestination = true";
         const filterParams = {};
-        if (usaUuid) {
-            filter += " || parentUuid = {:usaUuid}";
-            filterParams.usaUuid = usaUuid;
+        for (let i = 0; i < rootUuids.length; i++) {
+            const paramKey = `rootUuid${i}`;
+            filter += ` || parentUuid = {:${paramKey}}`;
+            filterParams[paramKey] = rootUuids[i];
         }
         filter += ")";
 
@@ -669,9 +669,23 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
         const derivedParentUuid = selfIdx > 0
             ? ancestors[selfIdx - 1]
             : (ancestors.length >= 2 ? ancestors[ancestors.length - 2] : "");
-        const finalParentUuid = typeof overrideParentUuid === "string"
-            ? overrideParentUuid
-            : (isNew ? derivedParentUuid : (record.getString("parentUuid") || derivedParentUuid));
+        const finalParentUuid = derivedParentUuid
+            || (typeof overrideParentUuid === "string" ? overrideParentUuid : "")
+            || (isNew ? "" : record.getString("parentUuid"));
+
+        let resolvedParentId = parentRecordId || "";
+        if (finalParentUuid && (!resolvedParentId || (overrideParentUuid && finalParentUuid !== overrideParentUuid))) {
+            try {
+                const parentRec = $app.findFirstRecordByFilter(
+                    POCKET_AREAS,
+                    "openbetaUuid = {:pUuid}",
+                    { pUuid: finalParentUuid }
+                );
+                if (parentRec) {
+                    resolvedParentId = parentRec.id;
+                }
+            } catch (_) {}
+        }
 
         record.set("openbetaUuid", areaObj.uuid);
         record.set("openbetaId", String(areaObj.id || areaObj.metadata?.area_id || ""));
@@ -681,8 +695,8 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
         if (finalParentUuid) {
             record.set("parentUuid", finalParentUuid);
         }
-        if (parentRecordId) {
-            record.set("parent", parentRecordId);
+        if (resolvedParentId) {
+            record.set("parent", resolvedParentId);
         }
         if (Array.isArray(areaObj.pathTokens)) {
             record.set("pathTokens", areaObj.pathTokens);
@@ -763,7 +777,7 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
  * @param {string} areaRecordId
  * @returns {Record|null}
  */
-function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
+function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId, parentAreaObj = null) {
     if (!climbObj || !climbObj.uuid) return null;
     try {
         const collection = $app.findCollectionByNameOrId(POCKET_CLIMBS);
@@ -853,11 +867,17 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
         record.set("description", String(climbObj.content?.description || ""));
         record.set("location", String(climbObj.content?.location || ""));
         record.set("protection", String(climbObj.content?.protection || ""));
-        if (Array.isArray(climbObj.pathTokens)) {
-            record.set("pathTokens", climbObj.pathTokens);
+        const finalPathTokens = Array.isArray(climbObj.pathTokens) && climbObj.pathTokens.length > 0
+            ? climbObj.pathTokens
+            : (Array.isArray(parentAreaObj?.pathTokens) ? parentAreaObj.pathTokens : []);
+        const finalAncestors = Array.isArray(climbObj.ancestors) && climbObj.ancestors.length > 0
+            ? climbObj.ancestors
+            : (Array.isArray(parentAreaObj?.ancestors) ? parentAreaObj.ancestors : []);
+        if (finalPathTokens.length > 0) {
+            record.set("pathTokens", finalPathTokens);
         }
-        if (Array.isArray(climbObj.ancestors)) {
-            record.set("ancestors", climbObj.ancestors);
+        if (finalAncestors.length > 0) {
+            record.set("ancestors", finalAncestors);
         }
         if (climbObj.grades) {
             record.set("grades", climbObj.grades);
@@ -1002,11 +1022,12 @@ function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {})
         if (typeof mediaObj.height === "number") record.set("height", mediaObj.height);
         record.set("format", String(mediaObj.format || ""));
         if (typeof mediaObj.size === "number") record.set("size", mediaObj.size);
-        record.set("username", String(mediaObj.username || ""));
-        record.set("userUuid", String(mediaObj.userUuid || ""));
+        const userObj = mediaObj.user || mediaObj.userProfile || {};
+        record.set("username", String(mediaObj.username || userObj.username || userObj.displayName || ""));
+        record.set("userUuid", String(mediaObj.userUuid || userObj.userUuid || ""));
         if (mediaObj.uploadTime) record.set("uploadTime", String(mediaObj.uploadTime));
         if (mediaObj.entityTags) record.set("entityTags", mediaObj.entityTags);
-        if (mediaObj.userProfile) record.set("userProfile", mediaObj.userProfile);
+        if (mediaObj.userProfile || mediaObj.user) record.set("userProfile", mediaObj.userProfile || mediaObj.user);
         record.set("isDeleted", false);
 
         $app.save(record);
@@ -1137,7 +1158,8 @@ function getOrSyncAreaDetail(idOrUuid) {
                         pathTokens
                         ancestors
                         gradeContext
-                        metadata { isDestination leaf isBoulder lat lng leftRightIndex mp_id area_id }
+                        content { description areaLocation }
+                        metadata { isDestination leaf isBoulder lat lng bbox leftRightIndex mp_id area_id }
                     }
                     climbs {
                         id
@@ -1180,7 +1202,7 @@ function getOrSyncAreaDetail(idOrUuid) {
                             format
                             size
                             username
-                            userUuid
+                            user { userUuid username displayName }
                             uploadTime
                         }
                         ticks {
@@ -1230,7 +1252,7 @@ function getOrSyncAreaDetail(idOrUuid) {
                     for (let i = 0; i < remoteClimbs.length; i++) {
                         const cl = remoteClimbs[i];
                         if (cl && cl.uuid) {
-                            upsertOpenBetaClimbRecord(cl, remoteArea.uuid, parentId);
+                            upsertOpenBetaClimbRecord(cl, remoteArea.uuid, parentId, remoteArea);
                         }
                     }
 
@@ -1256,6 +1278,38 @@ function getOrSyncAreaDetail(idOrUuid) {
         } catch (err) {
             $app.logger().error("On-demand OpenBeta area sync failed", "uuid", uuid, "error", err);
         }
+    }
+
+    if (childAreas.length === 0 && isUuidFormat) {
+        try {
+            const descAreas = $app.findRecordsByFilter(
+                POCKET_AREAS,
+                "ancestors ~ {:uuid} && openbetaUuid != {:uuid} && isDeleted = false",
+                "leftRightIndex,name",
+                0,
+                0,
+                { uuid }
+            ) || [];
+            if (descAreas.length > 0) {
+                const directDesc = [];
+                for (let i = 0; i < descAreas.length; i++) {
+                    const da = descAreas[i];
+                    let anc = [];
+                    try {
+                        const rawAnc = da.getString("ancestors") || da.get("ancestors");
+                        anc = Array.isArray(rawAnc)
+                            ? rawAnc
+                            : (typeof rawAnc === "string" && rawAnc.startsWith("[") ? JSON.parse(rawAnc) : []);
+                    } catch (_) {}
+                    const daUuid = da.getString("openbetaUuid");
+                    const idx = anc.indexOf(daUuid);
+                    if (idx > 0 && anc[idx - 1] === uuid) {
+                        directDesc.push(da);
+                    }
+                }
+                childAreas = directDesc.length > 0 ? directDesc : descAreas.slice(0, 24);
+            }
+        } catch (_) {}
     }
 
     let isDescendantClimbs = false;
