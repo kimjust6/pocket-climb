@@ -451,28 +451,23 @@ async function main() {
         }
     }
 
-    // 3. Deep crawl sub-areas, crags, climbs, pitches, media, and ticks in parallel batches of 4
+    // 3. Deep crawl sub-areas, crags, climbs, pitches, media, and ticks sequentially to avoid OpenBeta 504s
     console.log(`3/4 Deep crawling ${DEEP_CLIMB_SEED_UUIDS.length} climbing regions for climbs, pitches, media & ticks...`)
-    const concurrency = 4
-    for (let i = 0; i < DEEP_CLIMB_SEED_UUIDS.length; i += concurrency) {
-        const chunk = DEEP_CLIMB_SEED_UUIDS.slice(i, i + concurrency)
-        await Promise.all(
-            chunk.map(async (uuid, idx) => {
-                try {
-                    const deepData = await gqlQuery(DEEP_AREA_QUERY, { uuid })
-                    if (deepData?.area) {
-                        const rootArea = deepData.area
-                        const existing = collectedAreas.get(rootArea.uuid)
-                        walkAreaTree(rootArea, existing?.parentUuid ?? null)
-                        console.log(
-                            `  [${i + idx + 1}/${DEEP_CLIMB_SEED_UUIDS.length}] ${rootArea.area_name}: total areas=${collectedAreas.size}, climbs=${collectedClimbs.size}, pitches=${collectedPitches.length}, media=${collectedMedia.size}, ticks=${collectedTicks.size}`
-                        )
-                    }
-                } catch (err) {
-                    console.warn(`  Warning crawling ${uuid}:`, err.message)
-                }
-            })
-        )
+    for (let i = 0; i < DEEP_CLIMB_SEED_UUIDS.length; i++) {
+        const uuid = DEEP_CLIMB_SEED_UUIDS[i]
+        try {
+            const deepData = await gqlQuery(DEEP_AREA_QUERY, { uuid })
+            if (deepData?.area) {
+                const rootArea = deepData.area
+                const existing = collectedAreas.get(rootArea.uuid)
+                walkAreaTree(rootArea, existing?.parentUuid ?? null)
+                console.log(
+                    `  [${i + 1}/${DEEP_CLIMB_SEED_UUIDS.length}] ${rootArea.area_name}: total areas=${collectedAreas.size}, climbs=${collectedClimbs.size}, pitches=${collectedPitches.length}, media=${collectedMedia.size}, ticks=${collectedTicks.size}`
+                )
+            }
+        } catch (err) {
+            console.warn(`  Warning crawling ${uuid}:`, err.message)
+        }
     }
 
     // 4. Write everything to SQLite in a single fast transaction

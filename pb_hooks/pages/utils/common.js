@@ -141,7 +141,7 @@ function getBaseUrl() {
             $app.logger().error('Error getting appURL from settings', 'error', err);
         }
     }
-    return 'https://www.jkim.win';
+    return 'https://wiki-bloc.jkim.win';
 }
 
 /**
@@ -1073,7 +1073,7 @@ function prepareBlogPostsViewData(blogposts, isHomepage, isClimbing, params = {}
                 setOrUpdateMeta(data.metadata, 'twitter:url', url);
                 setOrUpdateMeta(data.metadata, 'og:image', ogImg);
                 setOrUpdateMeta(data.metadata, 'twitter:image', ogImg);
-                setOrUpdateMeta(data.metadata, 'og:site_name', 'The Justin Blog');
+                setOrUpdateMeta(data.metadata, 'og:site_name', 'Wiki Bloc');
                 setOrUpdateMeta(data.metadata, 'og:type', 'website');
             }
         } catch (err) {
@@ -1143,8 +1143,8 @@ function prepareBlogSingleViewData(singleBlog, isClimbing, params = {}, data = {
         if (data?.metadata) {
             try {
                 const pageTitle = isClimbing
-                    ? `${postTitle} | Climbing Blog`
-                    : `${postTitle} | The Justin Blog`;
+                    ? `${postTitle} | Wiki Bloc`
+                    : `${postTitle} | Wiki Bloc`;
 
                 setOrUpdateMeta(data.metadata, 'title', pageTitle);
                 setOrUpdateMeta(data.metadata, 'og:title', postTitle);
@@ -1165,7 +1165,7 @@ function prepareBlogSingleViewData(singleBlog, isClimbing, params = {}, data = {
 
                 // Type & site name
                 setOrUpdateMeta(data.metadata, 'og:type', 'article');
-                setOrUpdateMeta(data.metadata, 'og:site_name', isClimbing ? 'The Climbing Blog' : 'The Justin Blog');
+                setOrUpdateMeta(data.metadata, 'og:site_name', 'Wiki Bloc');
                 setOrUpdateMeta(data.metadata, 'og:locale', 'en_CA');
 
                 // Image handling
@@ -1628,11 +1628,11 @@ function prepareLoginPageViewData(api, data = {}) {
 
     if (data?.metadata) {
         const pageTitle = mode === 'register'
-            ? 'Create Account | The Justin Blog'
+            ? 'Create Account | Wiki Bloc'
             : mode === 'forgot'
-                ? 'Reset Password | The Justin Blog'
-                : 'Sign In | The Justin Blog';
-        const pageDesc = 'Sign in to your account on The Justin Blog.';
+                ? 'Reset Password | Wiki Bloc'
+                : 'Sign In | Wiki Bloc';
+        const pageDesc = 'Sign in to your account on Wiki Bloc.';
         const canonicalUrl = `${getBaseUrl()}/login`;
 
         setOrUpdateMeta(data.metadata, 'title', pageTitle);
@@ -2087,11 +2087,11 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     }
 
     if (data?.metadata) {
-        const pageTitle = `${name} Climbing Guide | The Justin Blog`;
+        const pageTitle = `${name} Climbing Guide | Wiki Bloc`;
         const pageDesc = description
             ? extractPreviewText(description).slice(0, 160)
             : `Explore ${formatNumberWithCommas(totalClimbs)} rock climbing routes, boulders, and crags in ${name}.`;
-        const canonicalUrl = `https://www.justink.dev${buildAreaUrl(uuid, name)}`;
+        const canonicalUrl = `https://wiki-bloc.jkim.win${buildAreaUrl(uuid, name)}`;
 
         setOrUpdateMeta(data.metadata, "title", pageTitle);
         setOrUpdateMeta(data.metadata, "og:title", pageTitle);

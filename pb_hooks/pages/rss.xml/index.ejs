@@ -4,11 +4,11 @@
   const blogposts = getAllBlogPosts("-manualPublishDate,-updated")
 
   const buildDate = new Date().toUTCString()
-  const description = "The Justin Blog - Read about the lessons I have learned (from the mistakes I have made)."
+  const description = "An open source community drive wiki that provides information on climbs"
 
   const items = blogposts.map(post => {
     const pubDate = new Date(post.getString('manualPublishDate') || post.getString('created')).toUTCString()
-    const postLink = `https://www.jkim.win/blog/posts/${encodeURIComponent(slugifyTitle(post.getString('title')))}/${post.id}`
+    const postLink = `https://wiki-bloc.jkim.win/blog/posts/${encodeURIComponent(slugifyTitle(post.getString('title')))}/${post.id}`
     const content1 = post.getString('content1') || ''
     const content2 = post.getString('content2') || ''
     const postDesc = content1
@@ -32,12 +32,12 @@
   const rss = `<?xml version="1.0" encoding="UTF-8" ?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
   <channel>
-    <title>The Justin Blog</title>
-    <link>https://www.jkim.win</link>
+    <title>Wiki Bloc</title>
+    <link>https://wiki-bloc.jkim.win</link>
     <description>${description}</description>
     <language>en-us</language>
     <lastBuildDate>${buildDate}</lastBuildDate>
-    <atom:link href="https://www.jkim.win/rss.xml" rel="self" type="application/rss+xml" />
+    <atom:link href="https://wiki-bloc.jkim.win/rss.xml" rel="self" type="application/rss+xml" />
     ${items}
   </channel>
 </rss>`

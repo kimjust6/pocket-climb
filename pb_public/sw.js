@@ -1,4 +1,4 @@
-// Justin Blog Service Worker - Static Asset & Image Caching Only (HTML/Theme is never cached)
+// Wiki Bloc Service Worker - Static Asset & Image Caching Only (HTML/Theme is never cached)
 const CACHE_VERSION = 'v4';
 const STATIC_CACHE = `justin-static-${CACHE_VERSION}`;
 const IMAGES_CACHE = `justin-images-${CACHE_VERSION}`;

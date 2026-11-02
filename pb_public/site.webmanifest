@@ -1,7 +1,7 @@
 {
-    "name": "The Justin Blog",
-    "short_name": "Justin Blog",
-    "description": "Keeping a personal record of my mistakes and lessons learned as a developer.",
+    "name": "Wiki Bloc",
+    "short_name": "Wiki Bloc",
+    "description": "An open source community drive wiki that provides information on climbs",
     "start_url": "/",
     "display": "standalone",
     "background_color": "#0f141c",

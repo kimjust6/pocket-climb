@@ -49,7 +49,7 @@
             <% } %>
         <% }); %>
 
-        <title><%= data.metadata.find(x => x.name === 'title')?.content || 'The Justin Blog' %></title>
+        <title><%= data.metadata.find(x => x.name === 'title')?.content || 'Wiki Bloc' %></title>
         <% const canonicalUrl = data.metadata.find(x => x.name === 'og:url' || x.name === 'url')?.content; %>
         <% if (canonicalUrl) { %>
         <link rel="canonical" href="<%= canonicalUrl %>" />
@@ -78,10 +78,10 @@
         <%
             const metaGet = (key) => (data.metadata || []).find(m => m.name === key)?.content;
             const isArticle = metaGet('og:type') === 'article';
-            const pageCanonical = metaGet('og:url') || metaGet('url') || 'https://www.jkim.win/';
-            const pageTitle = metaGet('og:title') || metaGet('title') || 'The Justin Blog';
-            const pageDesc = metaGet('og:description') || metaGet('description') || 'Keeping a personal record of my mistakes and lessons learned as a developer.';
-            const pageImg = metaGet('og:image') || 'https://www.jkim.win/og-image.png';
+            const pageCanonical = metaGet('og:url') || metaGet('url') || 'https://wiki-bloc.jkim.win/';
+            const pageTitle = metaGet('og:title') || metaGet('title') || 'Wiki Bloc';
+            const pageDesc = metaGet('og:description') || metaGet('description') || 'An open source community drive wiki that provides information on climbs';
+            const pageImg = metaGet('og:image') || 'https://wiki-bloc.jkim.win/og-image.png';
 
             let jsonLd;
             if (isArticle) {
@@ -118,7 +118,7 @@
                 jsonLd = {
                     "@context": "https://schema.org",
                     "@type": "WebSite",
-                    "name": "The Justin Blog",
+                    "name": "Wiki Bloc",
                     "url": pageCanonical,
                     "description": pageDesc,
                     "author": {

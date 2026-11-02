@@ -30,7 +30,7 @@ module.exports = function (api) {
         }
     } catch (_) { }
 
-    const baseUrl = 'https://wiki-bloc.jkim.win/';
+    const baseUrl = 'https://wiki-bloc.jkim.win';
     const pageUrl = pathname === '/' ? `${baseUrl}/` : `${baseUrl}${pathname}`;
     const user = getAuthenticatedUser(api.request);
 
@@ -42,12 +42,12 @@ module.exports = function (api) {
             {
                 name: 'title',
                 content:
-                    "The Justin Blog",
+                    "Wiki Bloc",
             },
             {
                 name: 'description',
                 content:
-                    'Keeping a personal record of my mistakes and lessons learned as a developer.',
+                    'An open source community drive wiki that provides information on climbs',
             },
             { name: 'url', content: pageUrl },
             { name: 'robots', content: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1' },
@@ -56,28 +56,28 @@ module.exports = function (api) {
             {
                 name: 'og:title',
                 content:
-                    "The Justin Blog",
+                    "Wiki Bloc",
             },
             { name: 'og:type', content: 'website' },
             { name: 'og:url', content: pageUrl },
             {
                 name: 'og:image',
-                content: 'https://www.jkim.win/og-image.png',
+                content: 'https://wiki-bloc.jkim.win/og-image.png',
             },
             {
                 name: 'og:image:secure_url',
-                content: 'https://www.jkim.win/og-image.png',
+                content: 'https://wiki-bloc.jkim.win/og-image.png',
             },
             { name: 'og:image:type', content: 'image/png' },
-            { name: 'og:image:alt', content: 'The Justin Blog Cover' },
+            { name: 'og:image:alt', content: 'Wiki Bloc Cover' },
             { name: 'og:image:width', content: '1200' },
             { name: 'og:image:height', content: '630' },
             {
                 name: 'og:description',
                 content:
-                    'Keeping a personal record of my mistakes and lessons learned as a developer.',
+                    'An open source community drive wiki that provides information on climbs',
             },
-            { name: 'og:site_name', content: "The Justin Blog" },
+            { name: 'og:site_name', content: "Wiki Bloc" },
             { name: 'og:locale', content: 'en_CA' },
 
             // Encourage connection—author details
@@ -96,16 +96,16 @@ module.exports = function (api) {
             {
                 name: 'twitter:title',
                 content:
-                    "The Justin Blog",
+                    "Wiki Bloc",
             },
             {
                 name: 'twitter:description',
                 content:
-                    'Keeping a personal record of my mistakes and lessons learned as a developer.',
+                    'An open source community drive wiki that provides information on climbs',
             },
             {
                 name: 'twitter:image',
-                content: 'https://www.jkim.win/og-image.png',
+                content: 'https://wiki-bloc.jkim.win/og-image.png',
             },
             {
                 name: 'twitter:url',

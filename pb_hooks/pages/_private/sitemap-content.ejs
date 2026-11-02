@@ -11,9 +11,9 @@
     : (new Date().toISOString().split('.')[0] + 'Z')
 
   const staticPages = [
-    { loc: 'https://www.jkim.win/',           lastmod: latestBlogUpdate,     priority: '1.00', changefreq: 'weekly' },
-    { loc: 'https://www.jkim.win/blog/posts', lastmod: latestBlogUpdate,     priority: '0.90', changefreq: 'daily'  },
-    { loc: 'https://www.jkim.win/climbing',   lastmod: latestClimbingUpdate, priority: '0.90', changefreq: 'daily'  },
+    { loc: 'https://wiki-bloc.jkim.win/',           lastmod: latestBlogUpdate,     priority: '1.00', changefreq: 'weekly' },
+    { loc: 'https://wiki-bloc.jkim.win/blog/posts', lastmod: latestBlogUpdate,     priority: '0.90', changefreq: 'daily'  },
+    { loc: 'https://wiki-bloc.jkim.win/climbing',   lastmod: latestClimbingUpdate, priority: '0.90', changefreq: 'daily'  },
   ]
 
   const xmlStaticPages = staticPages.map(({ loc, lastmod, priority, changefreq }) =>
@@ -29,7 +29,7 @@
     .map(
       (post) =>
         `<url>
-    <loc>https://www.jkim.win/blog/posts/${encodeURIComponent(slugifyTitle(post?.getString('title')))}/${post?.id}</loc>
+    <loc>https://wiki-bloc.jkim.win/blog/posts/${encodeURIComponent(slugifyTitle(post?.getString('title')))}/${post?.id}</loc>
     <lastmod>${new Date(post?.getString('updated')).toISOString().split('.')[0] + 'Z'}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.80</priority>
@@ -41,7 +41,7 @@
     .map(
       (post) =>
         `<url>
-    <loc>https://www.jkim.win/climbing/${encodeURIComponent(slugifyTitle(post?.getString('title')))}/${post?.id}</loc>
+    <loc>https://wiki-bloc.jkim.win/climbing/${encodeURIComponent(slugifyTitle(post?.getString('title')))}/${post?.id}</loc>
     <lastmod>${new Date(post?.getString('updated') || post?.getString('date')).toISOString().split('.')[0] + 'Z'}</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.70</priority>
