@@ -106,18 +106,18 @@
                     </div>
                 </div>
 
-                <% if (areaView.description || areaView.areaLocation) { %>
-                    <div class="grid gap-6 md:grid-cols-2 mt-6 pt-6 border-t border-base-content/10 text-sm text-base-content/90 leading-relaxed">
-                        <% if (areaView.description) { %>
+                <% if (areaView.descriptionHtml || areaView.areaLocationHtml) { %>
+                    <div class="grid gap-6 <%= (areaView.descriptionHtml && areaView.areaLocationHtml) ? 'md:grid-cols-2' : 'grid-cols-1' %> mt-6 pt-6 border-t border-base-content/10 text-sm text-base-content/90 leading-relaxed">
+                        <% if (areaView.descriptionHtml) { %>
                             <div>
-                                <h2 class="text-xs font-bold uppercase tracking-wider text-secondary mb-2">Description</h2>
-                                <p class="whitespace-pre-line"><%= areaView.description %></p>
+                                <h2 class="text-xs font-bold uppercase tracking-wider text-secondary mb-2.5">Description</h2>
+                                <div class="markdown-content space-y-2.5"><%- areaView.descriptionHtml %></div>
                             </div>
                         <% } %>
-                        <% if (areaView.areaLocation) { %>
+                        <% if (areaView.areaLocationHtml) { %>
                             <div>
-                                <h2 class="text-xs font-bold uppercase tracking-wider text-secondary mb-2">Approach & Location</h2>
-                                <p class="whitespace-pre-line"><%= areaView.areaLocation %></p>
+                                <h2 class="text-xs font-bold uppercase tracking-wider text-secondary mb-2.5">Approach & Location</h2>
+                                <div class="markdown-content space-y-2.5"><%- areaView.areaLocationHtml %></div>
                             </div>
                         <% } %>
                     </div>
@@ -173,7 +173,7 @@
 
                     <div class="grid gap-4 md:grid-cols-2">
                         <% areaView.climbs.forEach(climb => { %>
-                            <div class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-5 shadow-sm flex flex-col justify-between">
+                            <div id="climb-<%= climb.id %>" class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-5 shadow-sm flex flex-col justify-between scroll-mt-24">
                                 <div>
                                     <div class="flex items-start justify-between gap-3">
                                         <div>
@@ -249,20 +249,22 @@
                                         <% } %>
                                     </div>
 
-                                    <% if (climb.description) { %>
-                                        <p class="text-sm text-base-content/90 mt-3 line-clamp-4 whitespace-pre-line">
-                                            <%= climb.description %>
-                                        </p>
+                                    <% if (climb.descriptionHtml) { %>
+                                        <div class="text-sm text-base-content/90 mt-3 markdown-content space-y-2 leading-relaxed">
+                                            <%- climb.descriptionHtml %>
+                                        </div>
                                     <% } %>
-                                    <% if (climb.location) { %>
-                                        <p class="text-xs text-base-content/75 mt-2 line-clamp-2">
-                                            <strong class="text-secondary">Location:</strong> <%= climb.location %>
-                                        </p>
+                                    <% if (climb.locationHtml) { %>
+                                        <div class="text-xs text-base-content/80 mt-2.5">
+                                            <span class="font-bold text-secondary">Location:</span>
+                                            <span class="markdown-content leading-relaxed"><%- climb.locationHtml %></span>
+                                        </div>
                                     <% } %>
-                                    <% if (climb.protection) { %>
-                                        <p class="text-xs text-base-content/75 mt-1.5 line-clamp-2">
-                                            <strong class="text-secondary">Protection:</strong> <%= climb.protection %>
-                                        </p>
+                                    <% if (climb.protectionHtml) { %>
+                                        <div class="text-xs text-base-content/80 mt-1.5">
+                                            <span class="font-bold text-secondary">Protection:</span>
+                                            <span class="markdown-content leading-relaxed"><%- climb.protectionHtml %></span>
+                                        </div>
                                     <% } %>
                                 </div>
 
