@@ -1,6 +1,6 @@
 /** @type {import('pocketpages').MiddlewareLoaderFunc} */
 module.exports = function (api) {
-    const { getAuthenticatedUser } = require(`${__hooks}/pages/utils/common.js`);
+    const { getAuthenticatedUser, prepareSiteAndHeroViewData } = require(`${__hooks}/pages/utils/common.js`);
     let cookieValue = 'dark';
     try {
         // api.request.cookies is a function in the JS bridge
@@ -30,24 +30,26 @@ module.exports = function (api) {
         }
     } catch (_) { }
 
-    const baseUrl = 'https://wiki-bloc.jkim.win';
+    const siteConfig = prepareSiteAndHeroViewData();
+    const baseUrl = siteConfig.baseUrl;
+    const siteTitle = siteConfig.siteTitle;
+    const siteDesc = siteConfig.siteDescription;
     const pageUrl = pathname === '/' ? `${baseUrl}/` : `${baseUrl}${pathname}`;
     const user = getAuthenticatedUser(api.request);
 
     return {
         currentPath: pathname,
         user,
+        siteConfig,
         metadata: [
             // Basic metadata
             {
                 name: 'title',
-                content:
-                    "Wiki Bloc",
+                content: siteTitle,
             },
             {
                 name: 'description',
-                content:
-                    'An open source community drive wiki that provides information on climbs',
+                content: siteDesc,
             },
             { name: 'url', content: pageUrl },
             { name: 'robots', content: 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1' },
@@ -55,57 +57,53 @@ module.exports = function (api) {
             // Open Graph metadata
             {
                 name: 'og:title',
-                content:
-                    "Wiki Bloc",
+                content: siteTitle,
             },
             { name: 'og:type', content: 'website' },
             { name: 'og:url', content: pageUrl },
             {
                 name: 'og:image',
-                content: 'https://wiki-bloc.jkim.win/og-image.png',
+                content: `${baseUrl}/og-image.png`,
             },
             {
                 name: 'og:image:secure_url',
-                content: 'https://wiki-bloc.jkim.win/og-image.png',
+                content: `${baseUrl}/og-image.png`,
             },
             { name: 'og:image:type', content: 'image/png' },
-            { name: 'og:image:alt', content: 'Wiki Bloc Cover' },
+            { name: 'og:image:alt', content: `${siteTitle} Cover` },
             { name: 'og:image:width', content: '1200' },
             { name: 'og:image:height', content: '630' },
             {
                 name: 'og:description',
-                content:
-                    'An open source community drive wiki that provides information on climbs',
+                content: siteDesc,
             },
-            { name: 'og:site_name', content: "Wiki Bloc" },
+            { name: 'og:site_name', content: siteTitle },
             { name: 'og:locale', content: 'en_CA' },
 
             // Encourage connection—author details
-            { name: 'author', content: 'Justin Kim' },
+            { name: 'author', content: siteConfig.authorName },
             {
                 name: 'article:author',
-                content: 'https://www.justink.dev',
+                content: siteConfig.authorUrl,
             },
-            { name: 'article:author:name', content: 'Justin Kim' },
-            { name: 'article:publisher', content: 'https://www.justink.dev/' },
+            { name: 'article:author:name', content: siteConfig.authorName },
+            { name: 'article:publisher', content: `${siteConfig.authorUrl}/` },
 
             // Twitter Card metadata (optional, but helpful)
             { name: 'twitter:card', content: 'summary_large_image' },
-            { name: 'twitter:site', content: '@MatchaLatteTea' },
-            { name: 'twitter:creator', content: '@MatchaLatteTea' },
+            { name: 'twitter:site', content: siteConfig.twitterHandle },
+            { name: 'twitter:creator', content: siteConfig.twitterHandle },
             {
                 name: 'twitter:title',
-                content:
-                    "Wiki Bloc",
+                content: siteTitle,
             },
             {
                 name: 'twitter:description',
-                content:
-                    'An open source community drive wiki that provides information on climbs',
+                content: siteDesc,
             },
             {
                 name: 'twitter:image',
-                content: 'https://wiki-bloc.jkim.win/og-image.png',
+                content: `${baseUrl}/og-image.png`,
             },
             {
                 name: 'twitter:url',

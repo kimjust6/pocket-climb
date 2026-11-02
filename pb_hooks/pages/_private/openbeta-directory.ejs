@@ -83,7 +83,11 @@
                     <span>•</span>
                     <span><strong class="text-secondary"><%= directoryView.stats.totalStates %></strong> US States</span>
                     <span>•</span>
-                    <span><strong class="text-secondary"><%= directoryView.stats.formattedTotalClimbs %></strong> Total Climbs Indexed</span>
+                    <span><strong class="text-secondary"><%= directoryView.stats.formattedTotalAreas %></strong> Climbing Areas</span>
+                    <span>•</span>
+                    <span><strong class="text-secondary"><%= directoryView.stats.formattedTotalClimbs %></strong> Climbs</span>
+                    <span>•</span>
+                    <span><strong class="text-secondary"><%= directoryView.stats.formattedTotalTicks %></strong> Ticks</span>
                 </div>
                 <% if (directoryView.hasSearchQuery || directoryView.countryFilter !== 'ALL') { %>
                     <a href="/" class="text-accent hover:underline font-medium">Reset filters</a>
@@ -193,6 +197,66 @@
                                     </div>
                                 <% } %>
                             </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <!-- MATCHING SUB-AREAS / CRAGS FROM DB WHEN SEARCHING -->
+            <% if (directoryView.matchingSubAreas && directoryView.matchingSubAreas.length > 0) { %>
+                <section class="block w-full mt-12" aria-labelledby="heading-matching-areas">
+                    <div class="flex items-end justify-between mb-2">
+                        <h2 id="heading-matching-areas" class="text-2xl font-bold text-base-content tracking-tight">
+                            Matching Sub-Areas & Crags (<%= directoryView.matchingSubAreas.length %>)
+                        </h2>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <% directoryView.matchingSubAreas.forEach(area => { %>
+                            <a href="<%= area.url %>"
+                                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 border border-secondary/20 hover:border-accent/50 rounded-xl p-4 no-underline transition-all">
+                                <div class="flex items-start justify-between gap-2">
+                                    <span class="font-semibold text-sm text-secondary"><%= area.name %></span>
+                                    <% if (area.totalClimbs > 0) { %>
+                                        <span class="badge badge-sm bg-base-100/80 border border-base-content/20 text-base-content/80 font-mono shrink-0">
+                                            <%= area.formattedClimbs %>
+                                        </span>
+                                    <% } %>
+                                </div>
+                                <% if (area.pathSummary) { %>
+                                    <span class="text-xs text-base-content/60 mt-1 truncate"><%= area.pathSummary %></span>
+                                <% } %>
+                            </a>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <!-- MATCHING CLIMBS FROM DB WHEN SEARCHING -->
+            <% if (directoryView.matchingClimbs && directoryView.matchingClimbs.length > 0) { %>
+                <section class="block w-full mt-12" aria-labelledby="heading-matching-climbs">
+                    <div class="flex items-end justify-between mb-2">
+                        <h2 id="heading-matching-climbs" class="text-2xl font-bold text-base-content tracking-tight">
+                            Matching Climbs (<%= directoryView.matchingClimbs.length %>)
+                        </h2>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <% directoryView.matchingClimbs.forEach(cl => { %>
+                            <a href="<%= cl.areaUrl %>"
+                                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 border border-secondary/20 hover:border-accent/50 rounded-xl p-4 no-underline transition-all">
+                                <div class="flex items-start justify-between gap-2">
+                                    <span class="font-semibold text-sm text-secondary"><%= cl.name %></span>
+                                    <% if (cl.grade) { %>
+                                        <span class="badge badge-accent badge-sm font-mono font-bold shrink-0">
+                                            <%= cl.grade %>
+                                        </span>
+                                    <% } %>
+                                </div>
+                                <% if (cl.pathSummary) { %>
+                                    <span class="text-xs text-base-content/60 mt-1 truncate"><%= cl.pathSummary %></span>
+                                <% } %>
+                            </a>
                         <% }); %>
                     </div>
                 </section>

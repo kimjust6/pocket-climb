@@ -902,6 +902,102 @@ for org in (payload.get('organizations') or []):
     ))
 
 conn.commit()
+
+# Post-process: populate areas.parent PB IDs, climbs.ancestors/pathTokens, and reconcile areas.totalClimbs
+cur.execute("SELECT id, openbetaUuid, parentUuid, ancestors, pathTokens, totalClimbs FROM areas WHERE isDeleted = 0")
+area_rows = cur.fetchall()
+uuid_to_id = {}
+uuid_to_anc = {}
+uuid_to_tokens = {}
+for aid, u, pu, anc_s, tok_s, tc in area_rows:
+    uuid_to_id[u] = aid
+    try:
+        anc = json.loads(anc_s) if anc_s else []
+    except:
+        anc = []
+    try:
+        tok = json.loads(tok_s) if tok_s else []
+    except:
+        tok = []
+    if u and u not in anc:
+        anc = anc + [u]
+    uuid_to_anc[u] = anc
+    uuid_to_tokens[u] = tok
+
+parent_updates = [(uuid_to_id[pu], aid) for aid, u, pu, _, _, _ in area_rows if pu and pu in uuid_to_id]
+cur.executemany("UPDATE areas SET parent = ? WHERE id = ?", parent_updates)
+
+cur.execute("SELECT id, areaUuid FROM climbs WHERE isDeleted = 0")
+climb_rows = cur.fetchall()
+climb_updates = []
+direct_climb_counts = {}
+for cid, auuid in climb_rows:
+    direct_climb_counts[auuid] = direct_climb_counts.get(auuid, 0) + 1
+    anc = uuid_to_anc.get(auuid, [auuid] if auuid else [])
+    tok = uuid_to_tokens.get(auuid, [])
+    climb_updates.append((json.dumps(anc), json.dumps(tok), cid))
+cur.executemany("UPDATE climbs SET ancestors = ?, pathTokens = ? WHERE id = ?", climb_updates)
+
+ancestor_climb_counts = {}
+for auuid, cnt in direct_climb_counts.items():
+    for anc_u in set(uuid_to_anc.get(auuid, []) + [auuid]):
+        ancestor_climb_counts[anc_u] = ancestor_climb_counts.get(anc_u, 0) + cnt
+
+tc_updates = [
+    (ancestor_climb_counts.get(u, 0), aid)
+    for aid, u, pu, anc_s, tok_s, tc in area_rows
+    if ancestor_climb_counts.get(u, 0) > (tc or 0)
+]
+cur.executemany("UPDATE areas SET totalClimbs = ? WHERE id = ?", tc_updates)
+
+# Seed HOMEPAGE settings in admin_settings
+homepage_settings = [
+    ("SITE_TITLE", "Wiki Bloc", "HOMEPAGE"),
+    ("SITE_DESCRIPTION", "An open source community drive wiki that provides information on climbs", "HOMEPAGE"),
+    ("SITE_BASE_URL", "https://wiki-bloc.jkim.win", "HOMEPAGE"),
+    ("SITE_AUTHOR", "Justin Kim", "HOMEPAGE"),
+    ("SITE_AUTHOR_URL", "https://www.justink.dev", "HOMEPAGE"),
+    ("SITE_TWITTER_HANDLE", "@MatchaLatteTea", "HOMEPAGE"),
+    ("SITE_COPYRIGHT", "Justin K. All rights reserved.", "HOMEPAGE"),
+    ("HERO_SOCIAL_LINKS", json.dumps([
+        {"name": "Portfolio", "icon": "fa-solid fa-laptop-code", "url": "https://www.justink.dev"},
+        {"name": "GitHub", "icon": "fa-brands fa-github", "url": "https://github.com/kimjust6"},
+        {"name": "Instagram", "icon": "fa-brands fa-instagram", "url": "https://instagram.com/milklatteteas"},
+        {"name": "Bluesky", "icon": "fa-brands fa-bluesky", "url": "https://bsky.app/profile/milklattetea.bsky.social"}
+    ]), "HOMEPAGE"),
+    ("HERO_CARDS", json.dumps([
+        {
+            "url": "https://myblog.jkim.win/blog/posts",
+            "variant": "code",
+            "prefix": "$",
+            "text": "read about the lessons I have learned (from the mistakes I have made)."
+        },
+        {
+            "url": "https://myblog.jkim.win/climbing",
+            "variant": "card",
+            "icon": "mountain",
+            "text": "read about my climbing progression, projects, and (hopefully) sends"
+        }
+    ]), "HOMEPAGE"),
+    ("FEATURED_COUNTRY_CODES", json.dumps([
+        {"code": "ZAF", "label": "S. Africa", "priority": 3},
+        {"code": "CAN", "label": "Canada", "priority": 1},
+        {"code": "DEU", "label": "Germany", "priority": 2},
+        {"code": "USA", "label": "USA", "priority": 0}
+    ]), "HOMEPAGE")
+]
+for key, val, cat in homepage_settings:
+    cur.execute("SELECT id FROM admin_settings WHERE key = ?", (key,))
+    row = cur.fetchone()
+    if row:
+        cur.execute("UPDATE admin_settings SET value = ?, category = ?, updated = ? WHERE id = ?", (val, cat, now, row[0]))
+    else:
+        cur.execute(
+            "INSERT INTO admin_settings (id, key, value, category, created, updated) VALUES (?, ?, ?, ?, ?, ?)",
+            (gen_id(), key, val, cat, now, now)
+        )
+
+conn.commit()
 for tbl in ('areas', 'climbs', 'pitches', 'ticks', 'organizations', 'climb_media'):
     cnt = cur.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()[0]
     print(f"  {tbl}: {cnt} records")

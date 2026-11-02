@@ -1,32 +1,6 @@
 <script server>
-    const socials = [
-        {
-            name: 'Portfolio',
-            icon: 'fa-solid fa-globe',
-            url: 'https://www.justink.dev',
-        },
-        {
-            name: 'GitHub',
-            icon: 'fa-brands fa-github',
-            url: 'https://github.com/kimjust6',
-        },
-        {
-            name: 'Instagram',
-            icon: 'fa-brands fa-instagram',
-            url: 'https://instagram.com/milklatteteas',
-        },
-        {
-            name: 'Bluesky',
-            icon: 'fa-solid fa-cloud',
-            url: 'https://bsky.app/profile/milklattetea.bsky.social',
-        },
-    ]
-
-    const resources = [
-        { name: 'Privacy Policy', url: '/privacy' },
-        { name: 'Terms of Service', url: '/terms' },
-        { name: 'FAQ', url: '/faq' },
-    ]
+    const siteConfig = data.siteConfig || {}
+    const socials = siteConfig.socials || []
 </script>
 
 <!-- Footer -->
@@ -37,7 +11,7 @@
         <!-- Social Media -->
         <nav aria-label="Social media links">
             <ul class="text-base-content text-sm flex gap-6 flex-row flex-wrap justify-center items-center">
-                <% socials.forEach(social=> { %>
+                <% socials.forEach(social => { %>
                     <li>
                         <a href="<%= social.url %>" target="_blank" rel="noopener noreferrer"
                             class="font-medium text-base-content hover:text-secondary transition-colors duration-200 no-underline">
@@ -45,9 +19,9 @@
                                 <span class="sr-only">(opens in a new tab)</span>
                         </a>
                     </li>
-                    <% }) %>
+                <% }) %>
             </ul>
         </nav>
-        <p class="opacity-60">&copy; <%= new Date().getFullYear() %> Justin K. All rights reserved.</p>
+        <p class="opacity-60">&copy; <%= new Date().getFullYear() %> <%= siteConfig.copyrightText %></p>
     </div>
 </footer>

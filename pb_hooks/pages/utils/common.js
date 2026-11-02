@@ -1295,15 +1295,64 @@ function buildAreaUrl(id, name) {
 }
 
 /**
- * Prepare homepage Countries & Climbing Locations directory view model (OpenBeta style)
+ * Load site metadata, hero cards, social links, and footer info from `admin_settings` in PocketBase
+ * @returns {object}
+ */
+function prepareSiteAndHeroViewData() {
+    const { getHomepageSettingsMap } = require(`${__hooks}/pages/utils/pocket.js`);
+    const settings = getHomepageSettingsMap();
+
+    let socials = [];
+    try {
+        if (settings.HERO_SOCIAL_LINKS) {
+            socials = JSON.parse(settings.HERO_SOCIAL_LINKS);
+        }
+    } catch (_) {}
+
+    let heroCards = [];
+    try {
+        if (settings.HERO_CARDS) {
+            heroCards = JSON.parse(settings.HERO_CARDS);
+        }
+    } catch (_) {}
+
+    let featuredCountries = [];
+    try {
+        if (settings.FEATURED_COUNTRY_CODES) {
+            featuredCountries = JSON.parse(settings.FEATURED_COUNTRY_CODES);
+        }
+    } catch (_) {}
+
+    return {
+        siteTitle: settings.SITE_TITLE || "",
+        siteDescription: settings.SITE_DESCRIPTION || "",
+        baseUrl: settings.SITE_BASE_URL || getBaseUrl(),
+        authorName: settings.SITE_AUTHOR || "",
+        authorUrl: settings.SITE_AUTHOR_URL || "",
+        twitterHandle: settings.SITE_TWITTER_HANDLE || "",
+        copyrightText: settings.SITE_COPYRIGHT || "",
+        socials: Array.isArray(socials) ? socials : [],
+        heroCards: Array.isArray(heroCards) ? heroCards : [],
+        featuredCountries: Array.isArray(featuredCountries) ? featuredCountries : []
+    };
+}
+
+/**
+ * Prepare homepage Countries & Climbing Locations directory view model from PocketBase DB
  * @param {object} params
  * @param {object} reqObj
  * @param {object} data
  * @returns {object}
  */
 function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = null) {
-    const { getAllActiveAreas } = require(`${__hooks}/pages/utils/pocket.js`);
+    const {
+        getHomepageDirectoryAreas,
+        getDatabaseCatalogStats,
+        getAreas,
+        getClimbs
+    } = require(`${__hooks}/pages/utils/pocket.js`);
 
+    const siteConfig = data?.siteConfig || prepareSiteAndHeroViewData();
     const rawQuery = typeof params?.query === "string" ? params.query.trim() : "";
     const cleanQuery = sanitizeSearchTerm(rawQuery);
     const countryFilter = typeof params?.country === "string" ? params.country.trim().toUpperCase() : "";
@@ -1315,19 +1364,28 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         });
     }
 
-    const allRecords = getAllActiveAreas();
-    const areaItems = allRecords.map((r) => {
+    const directoryRecords = getHomepageDirectoryAreas();
+    const areaItems = directoryRecords.map((r) => {
         const uuid = r.getString("openbetaUuid");
         const name = r.getString("name");
         const totalClimbs = r.getInt("totalClimbs") || 0;
         const geoPoint = r.getGeoPoint("coordinates");
         let pathTokens = [];
+        let ancestors = [];
         try {
-            const rawTokens = r.get("pathTokens");
+            const rawTokens = r.getString("pathTokens") || r.get("pathTokens");
             if (Array.isArray(rawTokens)) {
                 pathTokens = rawTokens;
             } else if (typeof rawTokens === "string" && rawTokens.startsWith("[")) {
                 pathTokens = JSON.parse(rawTokens);
+            }
+        } catch (_) { }
+        try {
+            const rawAnc = r.getString("ancestors") || r.get("ancestors");
+            if (Array.isArray(rawAnc)) {
+                ancestors = rawAnc;
+            } else if (typeof rawAnc === "string" && rawAnc.startsWith("[")) {
+                ancestors = JSON.parse(rawAnc);
             }
         } catch (_) { }
 
@@ -1348,32 +1406,39 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             lat: geoPoint?.lat || 0,
             lng: geoPoint?.lon || 0,
             pathTokens,
+            ancestors,
             url: buildAreaUrl(r.id, name)
         };
     });
 
-    // Separate root countries vs child areas
     const rootCountries = areaItems.filter((a) => !a.parentUuid);
+    const usaRoot = rootCountries.find((c) => c.shortCode === "USA" || c.name === "USA") || null;
+    const usaUuid = usaRoot ? usaRoot.uuid : "";
+
+    // Group direct children by parentUuid and destinations by country/state ancestor UUID
     const childrenByParentUuid = {};
+    const destinationsByGroupUuid = {};
     for (let i = 0; i < areaItems.length; i++) {
         const item = areaItems[i];
-        if (item.parentUuid) {
-            if (!childrenByParentUuid[item.parentUuid]) {
-                childrenByParentUuid[item.parentUuid] = [];
+        if (!item.parentUuid) continue;
+
+        if (!childrenByParentUuid[item.parentUuid]) {
+            childrenByParentUuid[item.parentUuid] = [];
+        }
+        childrenByParentUuid[item.parentUuid].push(item);
+
+        if (item.isDestination) {
+            const groupUuid = (usaUuid && item.ancestors[0] === usaUuid && item.ancestors.length >= 2)
+                ? item.ancestors[1]
+                : (item.ancestors[0] || item.parentUuid);
+            if (groupUuid && groupUuid !== item.uuid) {
+                if (!destinationsByGroupUuid[groupUuid]) {
+                    destinationsByGroupUuid[groupUuid] = [];
+                }
+                destinationsByGroupUuid[groupUuid].push(item);
             }
-            childrenByParentUuid[item.parentUuid].push(item);
         }
     }
-
-    const usaRoot = rootCountries.find((c) => c.name === "USA" || c.shortCode === "USA") || {
-        id: "1db1e8ba-a40e-587c-88a4-64f5ea814b8e",
-        uuid: "1db1e8ba-a40e-587c-88a4-64f5ea814b8e",
-        name: "USA",
-        shortCode: "USA",
-        totalClimbs: 206261,
-        formattedClimbs: "206,261",
-        url: buildAreaUrl("1db1e8ba-a40e-587c-88a4-64f5ea814b8e", "USA")
-    };
 
     const qLower = rawQuery.toLowerCase();
     const matchesSearch = (item, childList = []) => {
@@ -1384,10 +1449,17 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         return childList.some((ch) => ch.name.toLowerCase().includes(qLower));
     };
 
-    // Featured International countries on OpenBeta homepage (Canada, Germany, South Africa) + other active countries
-    const priorityOrder = { CAN: 1, DEU: 2, ZAF: 3 };
+    // Priority order from DB `FEATURED_COUNTRY_CODES` setting
+    const priorityOrder = {};
+    for (let i = 0; i < siteConfig.featuredCountries.length; i++) {
+        const fc = siteConfig.featuredCountries[i];
+        if (fc && fc.code && fc.priority > 0) {
+            priorityOrder[fc.code] = fc.priority;
+        }
+    }
+
     const internationalCountries = rootCountries
-        .filter((c) => c.uuid !== usaRoot.uuid)
+        .filter((c) => !usaRoot || c.uuid !== usaRoot.uuid)
         .sort((a, b) => {
             const pA = priorityOrder[a.shortCode] || 99;
             const pB = priorityOrder[b.shortCode] || 99;
@@ -1395,9 +1467,8 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             return a.name.localeCompare(b.name);
         })
         .map((country) => {
+            const dests = destinationsByGroupUuid[country.uuid] || [];
             const rawChildren = childrenByParentUuid[country.uuid] || [];
-            // Show destination areas first; if none explicitly marked, show top climbing sub-areas
-            const dests = rawChildren.filter((ch) => ch.isDestination);
             const locations = (dests.length > 0 ? dests : rawChildren).sort((a, b) =>
                 b.totalClimbs - a.totalClimbs || a.name.localeCompare(b.name)
             );
@@ -1423,23 +1494,22 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             return matchesSearch(country, country.locations);
         });
 
-    // USA States + Featured Destinations under each state
-    const rawUsaStates = (childrenByParentUuid[usaRoot.uuid] || []).sort((a, b) =>
-        a.name.localeCompare(b.name)
-    );
+    const rawUsaStates = usaRoot
+        ? (childrenByParentUuid[usaRoot.uuid] || []).sort((a, b) => a.name.localeCompare(b.name))
+        : [];
 
     const usaStates = rawUsaStates
         .map((state) => {
-            const stateChildren = (childrenByParentUuid[state.uuid] || []).sort(
+            const stateDests = (destinationsByGroupUuid[state.uuid] || []).sort(
                 (a, b) => b.totalClimbs - a.totalClimbs || a.name.localeCompare(b.name)
             );
             const filteredDestinations = qLower
-                ? stateChildren.filter(
+                ? stateDests.filter(
                     (dest) =>
                         dest.name.toLowerCase().includes(qLower) ||
                         state.name.toLowerCase().includes(qLower)
                 )
-                : stateChildren;
+                : stateDests;
 
             return {
                 ...state,
@@ -1453,40 +1523,93 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             return matchesSearch(state, state.destinations);
         });
 
-    const totalGlobalClimbs = rootCountries.reduce((sum, c) => sum + (c.totalClimbs || 0), 0);
-    const totalDestinations = areaItems.filter((a) => a.isDestination).length;
-
-    const zafRoot = rootCountries.find((c) => c.shortCode === "ZAF" || c.name === "South Africa");
-    const canRoot = rootCountries.find((c) => c.shortCode === "CAN" || c.name === "Canada");
-    const deuRoot = rootCountries.find((c) => c.shortCode === "DEU" || c.name === "Germany");
-
-    const quickNavLinks = [
-        { code: "ALL", label: "All Countries", href: "/" },
-        {
-            code: "ZAF",
-            label: "S. Africa",
-            href: "/?country=ZAF",
-            areaUrl: zafRoot ? zafRoot.url : buildAreaUrl("1d33c773-e381-5b8a-a13f-3dfd7991732b", "South Africa")
-        },
-        {
-            code: "CAN",
-            label: "Canada",
-            href: "/?country=CAN",
-            areaUrl: canRoot ? canRoot.url : buildAreaUrl("2996145f-e1ba-5b56-9da8-30c64ccc3776", "Canada")
-        },
-        {
-            code: "DEU",
-            label: "Germany",
-            href: "/?country=DEU",
-            areaUrl: deuRoot ? deuRoot.url : buildAreaUrl("be9733db-21a2-53ec-86a2-3fb6fab552d9", "Germany")
-        },
-        {
-            code: "USA",
-            label: "USA",
-            href: "/?country=USA",
-            areaUrl: usaRoot.url
+    // Build quick country navigation links dynamically from DB countries + DB settings
+    const quickNavLinks = [{ code: "ALL", label: "All Countries", href: "/" }];
+    for (let i = 0; i < siteConfig.featuredCountries.length; i++) {
+        const fc = siteConfig.featuredCountries[i];
+        if (!fc || !fc.code) continue;
+        const countryRec = rootCountries.find((c) => c.shortCode === fc.code || c.name === fc.label);
+        if (countryRec) {
+            quickNavLinks.push({
+                code: countryRec.shortCode || fc.code,
+                label: fc.label || countryRec.name,
+                href: `/?country=${encodeURIComponent(countryRec.shortCode || fc.code)}`,
+                areaUrl: countryRec.url
+            });
         }
-    ];
+    }
+
+    // Query database catalog counts directly from PocketBase SQLite tables
+    const dbStats = getDatabaseCatalogStats(usaUuid);
+
+    // If user entered a search query, also search deep areas/crags and climbs in the DB
+    let matchingSubAreas = [];
+    let matchingClimbs = [];
+    if (rawQuery) {
+        const areasResult = getAreas(1, 24, rawQuery);
+        const shownUuids = new Set(areaItems.map((a) => a.uuid));
+        matchingSubAreas = (areasResult.items || [])
+            .filter((r) => !shownUuids.has(r.getString("openbetaUuid")))
+            .map((r) => {
+                const name = r.getString("name");
+                const tc = r.getInt("totalClimbs") || 0;
+                let pathTokens = [];
+                try {
+                    const rawPt = r.getString("pathTokens") || r.get("pathTokens");
+                    pathTokens = Array.isArray(rawPt)
+                        ? rawPt
+                        : typeof rawPt === "string" && rawPt.startsWith("[")
+                            ? JSON.parse(rawPt)
+                            : [];
+                } catch (_) {}
+                return {
+                    id: r.id,
+                    name,
+                    totalClimbs: tc,
+                    formattedClimbs: formatNumberWithCommas(tc),
+                    pathSummary: pathTokens.slice(0, -1).join(" › "),
+                    url: buildAreaUrl(r.id, name)
+                };
+            });
+
+        const climbsResult = getClimbs(1, 24, rawQuery);
+        matchingClimbs = (climbsResult.items || []).map((cl) => {
+            const grade =
+                cl.getString("gradeYds") ||
+                cl.getString("gradeVscale") ||
+                cl.getString("gradeFrench") ||
+                cl.getString("gradeFont") ||
+                "";
+            let clPathTokens = [];
+            try {
+                const rawPt = cl.getString("pathTokens") || cl.get("pathTokens");
+                clPathTokens = Array.isArray(rawPt)
+                    ? rawPt
+                    : typeof rawPt === "string" && rawPt.startsWith("[")
+                        ? JSON.parse(rawPt)
+                        : [];
+            } catch (_) {}
+            let disciplines = [];
+            try {
+                const rawDisc = cl.getString("disciplines") || cl.get("disciplines");
+                disciplines = Array.isArray(rawDisc)
+                    ? rawDisc
+                    : typeof rawDisc === "string" && rawDisc.startsWith("[")
+                        ? JSON.parse(rawDisc)
+                        : [];
+            } catch (_) {}
+            const areaId = cl.getString("area") || cl.getString("areaUuid") || "";
+            const areaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "Area";
+            return {
+                id: cl.id,
+                name: cl.getString("name"),
+                grade,
+                disciplines,
+                pathSummary: clPathTokens.join(" › "),
+                areaUrl: areaId ? buildAreaUrl(areaId, areaName) : "/"
+            };
+        });
+    }
 
     return {
         searchQuery: rawQuery,
@@ -1494,18 +1617,31 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         countryFilter: countryFilter || "ALL",
         quickNavLinks,
         stats: {
-            totalCountries: rootCountries.length,
-            totalStates: rawUsaStates.length,
-            totalDestinations,
-            totalClimbs: totalGlobalClimbs,
-            formattedTotalClimbs: formatNumberWithCommas(totalGlobalClimbs)
+            totalCountries: dbStats.totalCountries,
+            totalStates: dbStats.totalStates,
+            totalAreas: dbStats.totalAreas,
+            formattedTotalAreas: formatNumberWithCommas(dbStats.totalAreas),
+            totalDestinations: dbStats.totalDestinations,
+            totalClimbs: dbStats.totalClimbs,
+            formattedTotalClimbs: formatNumberWithCommas(dbStats.totalClimbs),
+            totalTicks: dbStats.totalTicks,
+            formattedTotalTicks: formatNumberWithCommas(dbStats.totalTicks),
+            totalOrganizations: dbStats.totalOrganizations
         },
         internationalCountries,
-        usa: {
-            ...usaRoot,
-            states: usaStates
-        },
-        hasResults: internationalCountries.length > 0 || usaStates.length > 0
+        usa: usaRoot
+            ? {
+                ...usaRoot,
+                states: usaStates
+            }
+            : null,
+        matchingSubAreas,
+        matchingClimbs,
+        hasResults:
+            internationalCountries.length > 0 ||
+            usaStates.length > 0 ||
+            matchingSubAreas.length > 0 ||
+            matchingClimbs.length > 0
     };
 }
 
@@ -1586,7 +1722,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     let pathTokens = [];
     let ancestors = [];
     try {
-        const rawTokens = areaRecord.get("pathTokens");
+        const rawTokens = areaRecord.getString("pathTokens") || areaRecord.get("pathTokens");
         pathTokens = Array.isArray(rawTokens)
             ? rawTokens
             : typeof rawTokens === "string" && rawTokens.startsWith("[")
@@ -1594,7 +1730,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
                 : [];
     } catch (_) { }
     try {
-        const rawAnc = areaRecord.get("ancestors");
+        const rawAnc = areaRecord.getString("ancestors") || areaRecord.get("ancestors");
         ancestors = Array.isArray(rawAnc)
             ? rawAnc
             : typeof rawAnc === "string" && rawAnc.startsWith("[")
@@ -1684,7 +1820,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
 
         let disciplines = [];
         try {
-            const rawDisc = cl.get("disciplines");
+            const rawDisc = cl.getString("disciplines") || cl.get("disciplines");
             if (Array.isArray(rawDisc)) {
                 disciplines = rawDisc;
             } else if (typeof rawDisc === "string" && rawDisc.startsWith("[")) {
@@ -1696,7 +1832,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
 
         let clPathTokens = [];
         try {
-            const rawPt = cl.get("pathTokens");
+            const rawPt = cl.getString("pathTokens") || cl.get("pathTokens");
             if (Array.isArray(rawPt)) {
                 clPathTokens = rawPt;
             } else if (typeof rawPt === "string" && rawPt.startsWith("[")) {
@@ -1841,6 +1977,7 @@ module.exports = {
     prepareLoginPageViewData,
     formatNumberWithCommas,
     buildAreaUrl,
+    prepareSiteAndHeroViewData,
     prepareHomepageDirectoryViewData,
     prepareAreaDetailViewData
 }
