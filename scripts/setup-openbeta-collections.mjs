@@ -163,6 +163,8 @@ async function main() {
         { name: 'content', type: 'json', required: false },
         { name: 'metadata', type: 'json', required: false },
         { name: 'authorMetadata', type: 'json', required: false },
+        { name: 'createdByUser', type: 'text', required: false },
+        { name: 'updatedByUser', type: 'text', required: false },
         { name: 'isDeleted', type: 'bool', required: false },
         ...AUTODATE_FIELDS,
     ]
@@ -221,6 +223,7 @@ async function main() {
         { name: 'fa', type: 'text', required: false },
         { name: 'length', type: 'number', onlyInt: true, required: false },
         { name: 'boltsCount', type: 'number', onlyInt: true, required: false },
+        { name: 'pitchesCount', type: 'number', onlyInt: true, required: false },
         {
             name: 'safety',
             type: 'select',
@@ -234,6 +237,7 @@ async function main() {
         { name: 'gradeFont', type: 'text', required: false },
         { name: 'gradeFrench', type: 'text', required: false },
         { name: 'gradeEwbank', type: 'text', required: false },
+        { name: 'gradeBrazilianCrux', type: 'text', required: false },
         { name: 'gradeUiaa', type: 'text', required: false },
         { name: 'gradeWi', type: 'text', required: false },
         {
@@ -265,6 +269,8 @@ async function main() {
         { name: 'content', type: 'json', required: false },
         { name: 'metadata', type: 'json', required: false },
         { name: 'authorMetadata', type: 'json', required: false },
+        { name: 'createdByUser', type: 'text', required: false },
+        { name: 'updatedByUser', type: 'text', required: false },
         { name: 'isDeleted', type: 'bool', required: false },
         ...AUTODATE_FIELDS,
     ]
@@ -298,7 +304,12 @@ async function main() {
         { name: 'boltsCount', type: 'number', onlyInt: true, required: false },
         { name: 'gradeYds', type: 'text', required: false },
         { name: 'gradeVscale', type: 'text', required: false },
+        { name: 'gradeFont', type: 'text', required: false },
         { name: 'gradeFrench', type: 'text', required: false },
+        { name: 'gradeEwbank', type: 'text', required: false },
+        { name: 'gradeBrazilianCrux', type: 'text', required: false },
+        { name: 'gradeUiaa', type: 'text', required: false },
+        { name: 'gradeWi', type: 'text', required: false },
         {
             name: 'disciplines',
             type: 'select',

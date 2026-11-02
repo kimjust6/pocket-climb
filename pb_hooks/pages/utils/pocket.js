@@ -1059,6 +1059,21 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
         if (areaObj.aggregate) {
             record.set("aggregate", areaObj.aggregate);
         }
+        if (areaObj.pathHash) {
+            record.set("pathHash", String(areaObj.pathHash));
+        }
+        if (areaObj.polygon) {
+            record.set("polygon", areaObj.polygon);
+        }
+        if (areaObj.authorMetadata) {
+            record.set("authorMetadata", areaObj.authorMetadata);
+            if (areaObj.authorMetadata.createdByUser?.displayName) {
+                record.set("createdByUser", String(areaObj.authorMetadata.createdByUser.displayName));
+            }
+            if (areaObj.authorMetadata.updatedByUser?.displayName) {
+                record.set("updatedByUser", String(areaObj.authorMetadata.updatedByUser.displayName));
+            }
+        }
         record.set("isDeleted", false);
 
         $app.save(record);
@@ -1111,6 +1126,7 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
             "tr"
         ];
         const activeDisciplines = disciplineKeys.filter((k) => Boolean(typeObj[k]));
+        const pitchesArr = Array.isArray(climbObj.pitches) ? climbObj.pitches : [];
 
         record.set("openbetaUuid", climbObj.uuid);
         record.set("openbetaId", String(climbObj.id || climbObj.metadata?.climb_id || ""));
@@ -1129,6 +1145,7 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
         if (typeof climbObj.boltsCount === "number") {
             record.set("boltsCount", climbObj.boltsCount);
         }
+        record.set("pitchesCount", pitchesArr.length > 0 ? pitchesArr.length : 1);
         if (climbObj.safety) {
             record.set("safety", String(climbObj.safety));
         }
@@ -1138,6 +1155,7 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
         record.set("gradeFont", String(climbObj.grades?.font || ""));
         record.set("gradeFrench", String(climbObj.grades?.french || ""));
         record.set("gradeEwbank", String(climbObj.grades?.ewbank || ""));
+        record.set("gradeBrazilianCrux", String(climbObj.grades?.brazilianCrux || ""));
         record.set("gradeUiaa", String(climbObj.grades?.uiaa || ""));
         record.set("gradeWi", String(climbObj.grades?.wi || ""));
         record.set("disciplines", activeDisciplines);
@@ -1181,9 +1199,38 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
         if (climbObj.metadata) {
             record.set("metadata", climbObj.metadata);
         }
+        if (climbObj.authorMetadata) {
+            record.set("authorMetadata", climbObj.authorMetadata);
+            if (climbObj.authorMetadata.createdByUser?.displayName) {
+                record.set("createdByUser", String(climbObj.authorMetadata.createdByUser.displayName));
+            }
+            if (climbObj.authorMetadata.updatedByUser?.displayName) {
+                record.set("updatedByUser", String(climbObj.authorMetadata.updatedByUser.displayName));
+            }
+        }
         record.set("isDeleted", false);
 
         $app.save(record);
+
+        // Upsert child pitches if provided
+        if (pitchesArr.length > 0) {
+            for (let pIdx = 0; pIdx < pitchesArr.length; pIdx++) {
+                upsertOpenBetaPitchRecord(pitchesArr[pIdx], climbObj.uuid, record.id, pIdx + 1);
+            }
+        }
+
+        // Upsert climb media if provided
+        const mediaArr = Array.isArray(climbObj.media) ? climbObj.media : [];
+        for (let mIdx = 0; mIdx < mediaArr.length; mIdx++) {
+            upsertOpenBetaMediaRecord(mediaArr[mIdx], { areaId: areaRecordId, climbId: record.id });
+        }
+
+        // Upsert climb ticks if provided
+        const ticksArr = Array.isArray(climbObj.ticks) ? climbObj.ticks : [];
+        for (let tIdx = 0; tIdx < ticksArr.length; tIdx++) {
+            upsertOpenBetaTickRecord(ticksArr[tIdx], climbObj.uuid, record.id, climbObj.name);
+        }
+
         return record;
     } catch (err) {
         $app.logger().error("Failed to upsert OpenBeta climb record", "uuid", climbObj?.uuid, "error", err);
@@ -1192,14 +1239,165 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
 }
 
 /**
+ * Upsert an OpenBeta Pitch object into the `pitches` collection
+ */
+function upsertOpenBetaPitchRecord(pitchObj, climbUuid, climbRecordId, defaultPitchNum = 1) {
+    if (!pitchObj || !climbRecordId) return null;
+    try {
+        const collection = $app.findCollectionByNameOrId(POCKET_PITCHES);
+        if (!collection) return null;
+
+        const pitchNum = typeof pitchObj.pitchNumber === "number" ? pitchObj.pitchNumber : defaultPitchNum;
+        let record = null;
+        try {
+            record = $app.findFirstRecordByFilter(
+                POCKET_PITCHES,
+                "climb = {:climbId} && pitchNumber = {:pitchNum}",
+                { climbId: climbRecordId, pitchNum }
+            );
+        } catch (_) {
+            record = null;
+        }
+        if (!record) {
+            record = new Record(collection);
+        }
+
+        const pType = pitchObj.type || {};
+        const disciplineKeys = ["trad", "sport", "bouldering", "deepwatersolo", "alpine", "snow", "ice", "mixed", "aid", "tr"];
+        const pDiscs = disciplineKeys.filter((k) => Boolean(pType[k]));
+
+        record.set("openbetaId", String(pitchObj.id || ""));
+        record.set("climb", climbRecordId);
+        record.set("parentUuid", String(pitchObj.parentId || climbUuid || ""));
+        record.set("pitchNumber", pitchNum);
+        if (typeof pitchObj.length === "number") {
+            record.set("length", pitchObj.length);
+        }
+        if (typeof pitchObj.boltsCount === "number") {
+            record.set("boltsCount", pitchObj.boltsCount);
+        }
+        record.set("description", String(pitchObj.description || ""));
+        record.set("gradeYds", String(pitchObj.grades?.yds || ""));
+        record.set("gradeVscale", String(pitchObj.grades?.vscale || ""));
+        record.set("gradeFrench", String(pitchObj.grades?.french || ""));
+        record.set("gradeFont", String(pitchObj.grades?.font || ""));
+        record.set("gradeEwbank", String(pitchObj.grades?.ewbank || ""));
+        record.set("gradeBrazilianCrux", String(pitchObj.grades?.brazilianCrux || ""));
+        record.set("gradeUiaa", String(pitchObj.grades?.uiaa || ""));
+        record.set("gradeWi", String(pitchObj.grades?.wi || ""));
+        record.set("disciplines", pDiscs);
+        if (pitchObj.grades) record.set("grades", pitchObj.grades);
+        if (pitchObj.type) record.set("type", pitchObj.type);
+        record.set("isDeleted", false);
+
+        $app.save(record);
+        return record;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Upsert an OpenBeta Media object into the `climb_media` collection
+ */
+function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {}) {
+    if (!mediaObj || !mediaObj.mediaUrl) return null;
+    try {
+        const collection = $app.findCollectionByNameOrId(POCKET_CLIMB_MEDIA);
+        if (!collection) return null;
+
+        let record = null;
+        try {
+            record = $app.findFirstRecordByFilter(
+                POCKET_CLIMB_MEDIA,
+                "mediaUrl = {:url}",
+                { url: mediaObj.mediaUrl }
+            );
+        } catch (_) {
+            record = null;
+        }
+        if (!record) {
+            record = new Record(collection);
+        }
+
+        record.set("openbetaId", String(mediaObj.id || ""));
+        record.set("mediaUrl", String(mediaObj.mediaUrl));
+        if (areaId) record.set("area", areaId);
+        if (climbId) record.set("climb", climbId);
+        if (typeof mediaObj.width === "number") record.set("width", mediaObj.width);
+        if (typeof mediaObj.height === "number") record.set("height", mediaObj.height);
+        record.set("format", String(mediaObj.format || ""));
+        if (typeof mediaObj.size === "number") record.set("size", mediaObj.size);
+        record.set("username", String(mediaObj.username || ""));
+        record.set("userUuid", String(mediaObj.userUuid || ""));
+        if (mediaObj.uploadTime) record.set("uploadTime", String(mediaObj.uploadTime));
+        if (mediaObj.entityTags) record.set("entityTags", mediaObj.entityTags);
+        if (mediaObj.userProfile) record.set("userProfile", mediaObj.userProfile);
+        record.set("isDeleted", false);
+
+        $app.save(record);
+        return record;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Upsert an OpenBeta Tick object into the `ticks` collection
+ */
+function upsertOpenBetaTickRecord(tickObj, climbUuid, climbRecordId, climbName = "") {
+    if (!tickObj || !climbUuid) return null;
+    try {
+        const collection = $app.findCollectionByNameOrId(POCKET_TICKS);
+        if (!collection) return null;
+
+        const openbetaId = String(tickObj._id || "");
+        let record = null;
+        if (openbetaId) {
+            try {
+                record = $app.findFirstRecordByFilter(
+                    POCKET_TICKS,
+                    "openbetaId = {:obId}",
+                    { obId: openbetaId }
+                );
+            } catch (_) {
+                record = null;
+            }
+        }
+        if (!record) {
+            record = new Record(collection);
+        }
+
+        record.set("openbetaId", openbetaId);
+        if (climbRecordId) record.set("climb", climbRecordId);
+        record.set("climbUuid", climbUuid);
+        record.set("name", String(tickObj.name || climbName || ""));
+        record.set("openbetaUserId", String(tickObj.userId || ""));
+        record.set("style", String(tickObj.style || ""));
+        record.set("attemptType", String(tickObj.attemptType || ""));
+        if (tickObj.dateClimbed) record.set("dateClimbed", String(tickObj.dateClimbed));
+        record.set("grade", String(tickObj.grade || ""));
+        record.set("notes", String(tickObj.notes || ""));
+        record.set("source", String(tickObj.source || "OB"));
+        if (tickObj.userProfile) record.set("userProfile", tickObj.userProfile);
+        record.set("isDeleted", false);
+
+        $app.save(record);
+        return record;
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
  * Get an area and its immediate sub-areas and climbs from PocketBase,
  * syncing from OpenBeta GraphQL API on-demand if children/climbs are not yet cached locally.
  * @param {string} uuid
- * @returns {{ areaRecord: Record|null, childAreas: Array<Record>, climbs: Array<Record> }}
+ * @returns {{ areaRecord: Record|null, childAreas: Array<Record>, climbs: Array<Record>, isDescendantClimbs: boolean }}
  */
 function getOrSyncAreaDetail(uuid) {
     if (!uuid || typeof uuid !== "string") {
-        return { areaRecord: null, childAreas: [], climbs: [] };
+        return { areaRecord: null, childAreas: [], climbs: [], isDescendantClimbs: false };
     }
 
     let areaRecord = getAreaByUuid(uuid);
@@ -1242,6 +1440,12 @@ function getOrSyncAreaDetail(uuid) {
                     gradeContext
                     content { description areaLocation }
                     metadata { isDestination leaf isBoulder lat lng bbox leftRightIndex mp_id area_id }
+                    authorMetadata {
+                        createdAt
+                        updatedAt
+                        createdByUser { id displayName }
+                        updatedByUser { id displayName }
+                    }
                     children {
                         id
                         uuid
@@ -1263,12 +1467,50 @@ function getOrSyncAreaDetail(uuid) {
                         boltsCount
                         safety
                         gradeContext
-                        grades { yds vscale font french ewbank uiaa wi }
+                        grades { yds vscale font french ewbank brazilianCrux uiaa wi }
                         type { trad sport bouldering tr alpine ice mixed aid deepwatersolo snow }
                         metadata { lat lng leftRightIndex mp_id climb_id }
                         content { description location protection }
                         pathTokens
                         ancestors
+                        authorMetadata {
+                            createdAt
+                            updatedAt
+                            createdByUser { id displayName }
+                            updatedByUser { id displayName }
+                        }
+                        pitches {
+                            id
+                            parentId
+                            pitchNumber
+                            length
+                            boltsCount
+                            description
+                            grades { yds vscale font french ewbank brazilianCrux uiaa wi }
+                            type { trad sport bouldering tr alpine ice mixed aid deepwatersolo snow }
+                        }
+                        media {
+                            id
+                            mediaUrl
+                            width
+                            height
+                            format
+                            size
+                            username
+                            userUuid
+                            uploadTime
+                        }
+                        ticks {
+                            _id
+                            name
+                            userId
+                            style
+                            attemptType
+                            dateClimbed
+                            grade
+                            notes
+                            source
+                        }
                     }
                 }
             }`;
@@ -1333,10 +1575,29 @@ function getOrSyncAreaDetail(uuid) {
         }
     }
 
+    let isDescendantClimbs = false;
+    if (climbs.length === 0 && childAreas.length > 0) {
+        try {
+            const descClimbs = $app.findRecordsByFilter(
+                POCKET_CLIMBS,
+                "ancestors ~ {:uuid} && isDeleted = false",
+                "leftRightIndex,name",
+                60,
+                0,
+                { uuid }
+            ) || [];
+            if (descClimbs.length > 0) {
+                climbs = descClimbs;
+                isDescendantClimbs = true;
+            }
+        } catch (_) {}
+    }
+
     return {
         areaRecord,
         childAreas,
-        climbs
+        climbs,
+        isDescendantClimbs
     };
 }
 

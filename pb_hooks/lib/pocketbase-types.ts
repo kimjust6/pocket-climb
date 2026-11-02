@@ -134,6 +134,7 @@ export type AreasRecord<
 	content?: null | Tcontent
 	coordinates?: GeoPoint
 	created: IsoAutoDateString
+	createdByUser?: string
 	density?: number
 	description?: string
 	gradeContext?: string
@@ -156,6 +157,7 @@ export type AreasRecord<
 	shortCode?: string
 	totalClimbs?: number
 	updated: IsoAutoDateString
+	updatedByUser?: string
 }
 
 export const ClimbDisciplinesOptions = {
@@ -200,9 +202,11 @@ export type ClimbsRecord<
 	content?: null | Tcontent
 	coordinates?: GeoPoint
 	created: IsoAutoDateString
+	createdByUser?: string
 	description?: string
 	disciplines?: ClimbDisciplinesOptions[]
 	fa?: string
+	gradeBrazilianCrux?: string
 	gradeContext?: string
 	gradeEwbank?: string
 	gradeFont?: string
@@ -233,10 +237,12 @@ export type ClimbsRecord<
 	openbetaId?: string
 	openbetaUuid: string
 	pathTokens?: null | TpathTokens
+	pitchesCount?: number
 	protection?: string
 	safety?: ClimbsSafetyOptions
 	type?: null | Ttype
 	updated: IsoAutoDateString
+	updatedByUser?: string
 }
 
 export type PitchesRecord<Tgrades = unknown, Ttype = unknown> = {
@@ -245,8 +251,13 @@ export type PitchesRecord<Tgrades = unknown, Ttype = unknown> = {
 	created: IsoAutoDateString
 	description?: string
 	disciplines?: ClimbDisciplinesOptions[]
+	gradeBrazilianCrux?: string
+	gradeEwbank?: string
+	gradeFont?: string
 	gradeFrench?: string
+	gradeUiaa?: string
 	gradeVscale?: string
+	gradeWi?: string
 	gradeYds?: string
 	grades?: null | Tgrades
 	id: string

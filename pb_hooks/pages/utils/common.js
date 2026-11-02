@@ -1903,7 +1903,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const uuid = typeof params?.uuid === "string" ? params.uuid.trim() : "";
     if (!uuid) return null;
 
-    const { areaRecord, childAreas, climbs } = getOrSyncAreaDetail(uuid);
+    const { areaRecord, childAreas, climbs, isDescendantClimbs } = getOrSyncAreaDetail(uuid);
     if (!areaRecord) return null;
 
     const name = areaRecord.getString("name") || "Climbing Area";
@@ -1914,6 +1914,8 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const lat = areaGeo?.lat || 0;
     const lng = areaGeo?.lon || 0;
     const shortCode = areaRecord.getString("shortCode") || "";
+    const createdByUser = areaRecord.getString("createdByUser") || "";
+    const updatedByUser = areaRecord.getString("updatedByUser") || "";
 
     let pathTokens = [];
     let ancestors = [];
@@ -1983,7 +1985,30 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         const gradeVscale = cl.getString("gradeVscale") || "";
         const gradeFrench = cl.getString("gradeFrench") || "";
         const gradeFont = cl.getString("gradeFont") || "";
-        const primaryGrade = gradeYds || gradeVscale || gradeFrench || gradeFont || "";
+        const gradeEwbank = cl.getString("gradeEwbank") || "";
+        const gradeBrazilianCrux = cl.getString("gradeBrazilianCrux") || "";
+        const gradeUiaa = cl.getString("gradeUiaa") || "";
+        const gradeWi = cl.getString("gradeWi") || "";
+        const primaryGrade =
+            gradeYds ||
+            gradeVscale ||
+            gradeFrench ||
+            gradeFont ||
+            gradeEwbank ||
+            gradeUiaa ||
+            gradeWi ||
+            gradeBrazilianCrux ||
+            "";
+
+        const allGrades = [];
+        if (gradeYds) allGrades.push({ system: "YDS", value: gradeYds });
+        if (gradeVscale) allGrades.push({ system: "V", value: gradeVscale });
+        if (gradeFrench && gradeFrench !== gradeYds) allGrades.push({ system: "FR", value: gradeFrench });
+        if (gradeFont && gradeFont !== gradeVscale) allGrades.push({ system: "Font", value: gradeFont });
+        if (gradeEwbank) allGrades.push({ system: "Ewbank", value: gradeEwbank });
+        if (gradeUiaa) allGrades.push({ system: "UIAA", value: gradeUiaa });
+        if (gradeWi) allGrades.push({ system: "WI", value: gradeWi });
+        if (gradeBrazilianCrux) allGrades.push({ system: "BR", value: gradeBrazilianCrux });
 
         let disciplines = [];
         try {
@@ -1997,10 +2022,25 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             }
         } catch (_) {}
 
+        let clPathTokens = [];
+        try {
+            const rawPt = cl.get("pathTokens");
+            if (Array.isArray(rawPt)) {
+                clPathTokens = rawPt;
+            } else if (typeof rawPt === "string" && rawPt.startsWith("[")) {
+                clPathTokens = JSON.parse(rawPt);
+            }
+        } catch (_) {}
+
+        const clAreaUuid = cl.getString("areaUuid") || "";
+        const clSubAreaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "";
+
         const safety = cl.getString("safety") || "";
         const clGeo = cl.getGeoPoint("coordinates");
         const clLat = clGeo?.lat || 0;
         const clLng = clGeo?.lon || 0;
+        const pitchesCount = cl.getInt("pitchesCount") || 1;
+
         return {
             id: cl.id,
             uuid: cl.getString("openbetaUuid"),
@@ -2008,12 +2048,18 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             fa: cl.getString("fa") || "",
             length: cl.getInt("length") || 0,
             boltsCount: cl.getInt("boltsCount") || 0,
+            pitchesCount,
             safety: safety !== "UNSPECIFIED" ? safety : "",
             primaryGrade,
             gradeYds,
             gradeVscale,
             gradeFrench,
             gradeFont,
+            gradeEwbank,
+            gradeBrazilianCrux,
+            gradeUiaa,
+            gradeWi,
+            allGrades,
             disciplines,
             coordinates: {
                 lon: clLng,
@@ -2024,7 +2070,11 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             hasCoords: typeof clLat === "number" && typeof clLng === "number" && (clLat !== 0 || clLng !== 0),
             description: cl.getString("description") || "",
             location: cl.getString("location") || "",
-            protection: cl.getString("protection") || ""
+            protection: cl.getString("protection") || "",
+            createdByUser: cl.getString("createdByUser") || "",
+            updatedByUser: cl.getString("updatedByUser") || "",
+            subAreaName: clSubAreaName && clSubAreaName !== name ? clSubAreaName : "",
+            subAreaUrl: clAreaUuid && clSubAreaName ? buildAreaUrl(clAreaUuid, clSubAreaName) : ""
         };
     });
 
@@ -2063,12 +2113,15 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         formattedClimbs: formatNumberWithCommas(totalClimbs),
         description,
         areaLocation,
+        createdByUser,
+        updatedByUser,
         lat,
         lng,
         hasCoords: typeof lat === "number" && typeof lng === "number" && (lat !== 0 || lng !== 0),
         breadcrumbs,
         children: formattedChildren,
         climbs: formattedClimbs,
+        isDescendantClimbs: Boolean(isDescendantClimbs),
         url: buildAreaUrl(uuid, name)
     };
 }
