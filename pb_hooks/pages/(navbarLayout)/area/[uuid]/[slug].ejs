@@ -5,6 +5,12 @@
 
     if (!areaView) {
         api.status = 404
+    } else if (areaView.shouldRedirect && areaView.canonicalPath) {
+        if (typeof response !== 'undefined' && typeof response.redirect === 'function') {
+            response.redirect(areaView.canonicalPath, 301)
+        } else {
+            redirect(areaView.canonicalPath)
+        }
     }
 </script>
 

@@ -208,6 +208,8 @@ module.exports = {
     requestPasswordResetByEmail,
     registerNewUser,
     getAreaByUuid,
+    getAreasByNamePrefix,
+    getAreasMapByUuids,
     getAreas,
     getAllActiveAreas,
     ensureOpenBetaDirectorySeeded,
@@ -502,6 +504,46 @@ function getAreaByUuid(uuidOrId) {
     } catch (_) {
         return null;
     }
+}
+
+/**
+ * Get areas by name prefix (used for slug fallback lookup)
+ * @param {string} namePrefix
+ * @returns {Array<Record>}
+ */
+function getAreasByNamePrefix(namePrefix) {
+    if (!namePrefix) return [];
+    try {
+        return $app.findRecordsByFilter(
+            POCKET_AREAS,
+            "name ~ {:namePrefix} && isDeleted = false",
+            "-totalClimbs,name",
+            0,
+            0,
+            { namePrefix }
+        ) || [];
+    } catch (_) {
+        return [];
+    }
+}
+
+/**
+ * Look up a map of OpenBeta UUID -> Area Record for a list of UUIDs
+ * @param {Array<string>} uuids
+ * @returns {Object<string, Record>}
+ */
+function getAreasMapByUuids(uuids = []) {
+    const map = {};
+    if (!Array.isArray(uuids) || uuids.length === 0) return map;
+    for (let i = 0; i < uuids.length; i++) {
+        const u = uuids[i];
+        if (!u || map[u]) continue;
+        const rec = getAreaByUuid(u);
+        if (rec) {
+            map[u] = rec;
+        }
+    }
+    return map;
 }
 
 /**
@@ -1067,11 +1109,13 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
         }
         if (areaObj.authorMetadata) {
             record.set("authorMetadata", areaObj.authorMetadata);
-            if (areaObj.authorMetadata.createdByUser?.displayName) {
-                record.set("createdByUser", String(areaObj.authorMetadata.createdByUser.displayName));
+            const createdBy = areaObj.authorMetadata.createdByUser?.displayName || areaObj.authorMetadata.createdByUser;
+            const updatedBy = areaObj.authorMetadata.updatedByUser?.displayName || areaObj.authorMetadata.updatedByUser;
+            if (createdBy) {
+                record.set("createdByUser", String(createdBy));
             }
-            if (areaObj.authorMetadata.updatedByUser?.displayName) {
-                record.set("updatedByUser", String(areaObj.authorMetadata.updatedByUser.displayName));
+            if (updatedBy) {
+                record.set("updatedByUser", String(updatedBy));
             }
         }
         record.set("isDeleted", false);
@@ -1201,11 +1245,13 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
         }
         if (climbObj.authorMetadata) {
             record.set("authorMetadata", climbObj.authorMetadata);
-            if (climbObj.authorMetadata.createdByUser?.displayName) {
-                record.set("createdByUser", String(climbObj.authorMetadata.createdByUser.displayName));
+            const createdBy = climbObj.authorMetadata.createdByUser?.displayName || climbObj.authorMetadata.createdByUser;
+            const updatedBy = climbObj.authorMetadata.updatedByUser?.displayName || climbObj.authorMetadata.updatedByUser;
+            if (createdBy) {
+                record.set("createdByUser", String(createdBy));
             }
-            if (climbObj.authorMetadata.updatedByUser?.displayName) {
-                record.set("updatedByUser", String(climbObj.authorMetadata.updatedByUser.displayName));
+            if (updatedBy) {
+                record.set("updatedByUser", String(updatedBy));
             }
         }
         record.set("isDeleted", false);
@@ -1392,22 +1438,25 @@ function upsertOpenBetaTickRecord(tickObj, climbUuid, climbRecordId, climbName =
 /**
  * Get an area and its immediate sub-areas and climbs from PocketBase,
  * syncing from OpenBeta GraphQL API on-demand if children/climbs are not yet cached locally.
- * @param {string} uuid
+ * @param {string} idOrUuid
  * @returns {{ areaRecord: Record|null, childAreas: Array<Record>, climbs: Array<Record>, isDescendantClimbs: boolean }}
  */
-function getOrSyncAreaDetail(uuid) {
-    if (!uuid || typeof uuid !== "string") {
+function getOrSyncAreaDetail(idOrUuid) {
+    if (!idOrUuid || typeof idOrUuid !== "string") {
         return { areaRecord: null, childAreas: [], climbs: [], isDescendantClimbs: false };
     }
 
-    let areaRecord = getAreaByUuid(uuid);
+    let areaRecord = getAreaByUuid(idOrUuid);
+    const uuid = areaRecord ? (areaRecord.getString("openbetaUuid") || idOrUuid) : idOrUuid;
+    const recId = areaRecord?.id || idOrUuid;
+
     let childAreas = $app.findRecordsByFilter(
         POCKET_AREAS,
         "(parentUuid = {:uuid} || parent = {:id}) && isDeleted = false",
         "leftRightIndex,name",
         0,
         0,
-        { uuid, id: areaRecord?.id || "" }
+        { uuid, id: recId }
     ) || [];
 
     let climbs = $app.findRecordsByFilter(
@@ -1416,13 +1465,15 @@ function getOrSyncAreaDetail(uuid) {
         "leftRightIndex,name",
         0,
         0,
-        { uuid, id: areaRecord?.id || "" }
+        { uuid, id: recId }
     ) || [];
 
-    const needsSync = !areaRecord || (
-        childAreas.length === 0 &&
-        climbs.length === 0 &&
-        (areaRecord.getInt("totalClimbs") > 0 || !areaRecord.getBool("isLeaf"))
+    const isUuidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(uuid);
+    const needsSync = isUuidFormat && (
+        !areaRecord || (
+            childAreas.length === 0 &&
+            climbs.length === 0
+        )
     );
 
     if (needsSync && typeof $http !== "undefined") {
@@ -1442,9 +1493,11 @@ function getOrSyncAreaDetail(uuid) {
                     metadata { isDestination leaf isBoulder lat lng bbox leftRightIndex mp_id area_id }
                     authorMetadata {
                         createdAt
+                        createdBy
+                        createdByUser
                         updatedAt
-                        createdByUser { id displayName }
-                        updatedByUser { id displayName }
+                        updatedBy
+                        updatedByUser
                     }
                     children {
                         id
@@ -1475,9 +1528,11 @@ function getOrSyncAreaDetail(uuid) {
                         ancestors
                         authorMetadata {
                             createdAt
+                            createdBy
+                            createdByUser
                             updatedAt
-                            createdByUser { id displayName }
-                            updatedByUser { id displayName }
+                            updatedBy
+                            updatedByUser
                         }
                         pitches {
                             id

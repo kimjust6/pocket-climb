@@ -132,7 +132,7 @@ function getBaseUrl() {
         if (typeof $app !== 'undefined' && $app?.settings) {
             const meta = $app.settings()?.meta;
             const appUrl = meta?.appURL || meta?.appUrl;
-            if (appUrl) {
+            if (appUrl && !/localhost|127\.0\.0\.1/i.test(appUrl)) {
                 return appUrl.replace(/\/+$/, '');
             }
         }
@@ -1481,7 +1481,7 @@ function prepareLoginPageViewData(api, data = {}) {
             if (typeof api?.formData === 'function') return api.formData() || {};
             if (api?.formData && typeof api.formData === 'object') return api.formData;
             if (typeof req?.formData === 'function') return req.formData() || {};
-        } catch (_) {}
+        } catch (_) { }
         return {};
     })();
 
@@ -1671,14 +1671,14 @@ function formatNumberWithCommas(num) {
 }
 
 /**
- * Build canonical OpenBeta-style area URL (/area/:uuid/:slug)
- * @param {string} uuid
+ * Build canonical Area URL (/area/:slug/:id) matching blog/climbing routes
+ * @param {string} id
  * @param {string} name
  * @returns {string}
  */
-function buildAreaUrl(uuid, name) {
-    const slug = slugifyTitle(String(name || "area"));
-    return `/area/${encodeURIComponent(String(uuid || ""))}/${encodeURIComponent(slug || "area")}`;
+function buildAreaUrl(id, name) {
+    const slug = slugifyTitle(String(name || "area")) || "area";
+    return `/area/${encodeURIComponent(slug)}/${encodeURIComponent(String(id || ""))}`;
 }
 
 /**
@@ -1716,7 +1716,7 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             } else if (typeof rawTokens === "string" && rawTokens.startsWith("[")) {
                 pathTokens = JSON.parse(rawTokens);
             }
-        } catch (_) {}
+        } catch (_) { }
 
         return {
             id: r.id,
@@ -1735,7 +1735,7 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             lat: geoPoint?.lat || 0,
             lng: geoPoint?.lon || 0,
             pathTokens,
-            url: buildAreaUrl(uuid, name)
+            url: buildAreaUrl(r.id, name)
         };
     });
 
@@ -1753,6 +1753,7 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
     }
 
     const usaRoot = rootCountries.find((c) => c.name === "USA" || c.shortCode === "USA") || {
+        id: "1db1e8ba-a40e-587c-88a4-64f5ea814b8e",
         uuid: "1db1e8ba-a40e-587c-88a4-64f5ea814b8e",
         name: "USA",
         shortCode: "USA",
@@ -1789,10 +1790,10 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             );
             const filteredLocations = qLower
                 ? locations.filter(
-                      (loc) =>
-                          loc.name.toLowerCase().includes(qLower) ||
-                          country.name.toLowerCase().includes(qLower)
-                  )
+                    (loc) =>
+                        loc.name.toLowerCase().includes(qLower) ||
+                        country.name.toLowerCase().includes(qLower)
+                )
                 : locations;
 
             return {
@@ -1821,10 +1822,10 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             );
             const filteredDestinations = qLower
                 ? stateChildren.filter(
-                      (dest) =>
-                          dest.name.toLowerCase().includes(qLower) ||
-                          state.name.toLowerCase().includes(qLower)
-                  )
+                    (dest) =>
+                        dest.name.toLowerCase().includes(qLower) ||
+                        state.name.toLowerCase().includes(qLower)
+                )
                 : stateChildren;
 
             return {
@@ -1842,25 +1843,29 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
     const totalGlobalClimbs = rootCountries.reduce((sum, c) => sum + (c.totalClimbs || 0), 0);
     const totalDestinations = areaItems.filter((a) => a.isDestination).length;
 
+    const zafRoot = rootCountries.find((c) => c.shortCode === "ZAF" || c.name === "South Africa");
+    const canRoot = rootCountries.find((c) => c.shortCode === "CAN" || c.name === "Canada");
+    const deuRoot = rootCountries.find((c) => c.shortCode === "DEU" || c.name === "Germany");
+
     const quickNavLinks = [
         { code: "ALL", label: "All Countries", href: "/" },
         {
             code: "ZAF",
             label: "S. Africa",
             href: "/?country=ZAF",
-            areaUrl: buildAreaUrl("1d33c773-e381-5b8a-a13f-3dfd7991732b", "South Africa")
+            areaUrl: zafRoot ? zafRoot.url : buildAreaUrl("1d33c773-e381-5b8a-a13f-3dfd7991732b", "South Africa")
         },
         {
             code: "CAN",
             label: "Canada",
             href: "/?country=CAN",
-            areaUrl: buildAreaUrl("2996145f-e1ba-5b56-9da8-30c64ccc3776", "Canada")
+            areaUrl: canRoot ? canRoot.url : buildAreaUrl("2996145f-e1ba-5b56-9da8-30c64ccc3776", "Canada")
         },
         {
             code: "DEU",
             label: "Germany",
             href: "/?country=DEU",
-            areaUrl: buildAreaUrl("be9733db-21a2-53ec-86a2-3fb6fab552d9", "Germany")
+            areaUrl: deuRoot ? deuRoot.url : buildAreaUrl("be9733db-21a2-53ec-86a2-3fb6fab552d9", "Germany")
         },
         {
             code: "USA",
@@ -1892,21 +1897,69 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
 }
 
 /**
- * Prepare single Area page view model (/area/:uuid/:slug)
+ * Prepare single Area page view model (/area/:slug/:id)
+ * Also supports legacy /area/:uuid/:slug, /area/:uuid, and /area/:slug with 301 canonical redirect.
  * @param {object} params
  * @param {object} reqObj
  * @param {object} data
  * @returns {object|null}
  */
 function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
-    const { getOrSyncAreaDetail } = require(`${__hooks}/pages/utils/pocket.js`);
-    const uuid = typeof params?.uuid === "string" ? params.uuid.trim() : "";
-    if (!uuid) return null;
+    const {
+        getOrSyncAreaDetail,
+        getAreasByNamePrefix,
+        getAreasMapByUuids
+    } = require(`${__hooks}/pages/utils/pocket.js`);
 
-    const { areaRecord, childAreas, climbs, isDescendantClimbs } = getOrSyncAreaDetail(uuid);
+    const seg1 = typeof (params?.title ?? params?.uuid) === "string"
+        ? (params.title ?? params.uuid).trim()
+        : "";
+    const seg2 = typeof (params?.id ?? params?.slug) === "string"
+        ? (params.id ?? params.slug).trim()
+        : "";
+
+    if (!seg1 && !seg2) return null;
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let lookupKey = "";
+    if (uuidRegex.test(seg1)) {
+        // Legacy /area/:uuid/:slug or /area/:uuid
+        lookupKey = seg1;
+    } else if (seg2) {
+        // Canonical /area/:slug/:id (or /area/:slug/:uuid)
+        lookupKey = seg2;
+    } else {
+        // Single segment /area/:idOrSlug
+        lookupKey = seg1;
+    }
+
+    let { areaRecord, childAreas, climbs, isDescendantClimbs } = getOrSyncAreaDetail(lookupKey);
+
+    // Fallback: if single-segment /area/:slug was visited, resolve by slug match
+    if (!areaRecord && seg1 && !seg2 && !uuidRegex.test(seg1)) {
+        const firstWord = seg1.split("-")[0].replace(/"/g, '\\"');
+        const candidates = getAreasByNamePrefix(firstWord);
+        const targetSlug = seg1.toLowerCase();
+        const matched = candidates.find(
+            (a) => slugifyTitle(a.getString("name")) === targetSlug
+        );
+        if (matched) {
+            const detail = getOrSyncAreaDetail(matched.id);
+            areaRecord = detail.areaRecord;
+            childAreas = detail.childAreas;
+            climbs = detail.climbs;
+            isDescendantClimbs = detail.isDescendantClimbs;
+        }
+    }
+
     if (!areaRecord) return null;
 
+    const uuid = areaRecord.getString("openbetaUuid") || lookupKey;
     const name = areaRecord.getString("name") || "Climbing Area";
+    const canonicalSlug = slugifyTitle(name) || "area";
+    const canonicalPath = buildAreaUrl(areaRecord.id, name);
+    const shouldRedirect = seg1 !== canonicalSlug || seg2 !== areaRecord.id;
+
     const totalClimbs = areaRecord.getInt("totalClimbs") || climbs.length || 0;
     const description = areaRecord.getString("description") || "";
     const areaLocation = areaRecord.getString("areaLocation") || "";
@@ -1924,33 +1977,39 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         pathTokens = Array.isArray(rawTokens)
             ? rawTokens
             : typeof rawTokens === "string" && rawTokens.startsWith("[")
-              ? JSON.parse(rawTokens)
-              : [];
-    } catch (_) {}
+                ? JSON.parse(rawTokens)
+                : [];
+    } catch (_) { }
     try {
         const rawAnc = areaRecord.get("ancestors");
         ancestors = Array.isArray(rawAnc)
             ? rawAnc
             : typeof rawAnc === "string" && rawAnc.startsWith("[")
-              ? JSON.parse(rawAnc)
-              : [];
-    } catch (_) {}
+                ? JSON.parse(rawAnc)
+                : [];
+    } catch (_) { }
 
+    const ancestorRecordsByUuid = getAreasMapByUuids(ancestors);
     const breadcrumbs = [];
     const crumbLen = Math.min(pathTokens.length, ancestors.length);
     for (let i = 0; i < crumbLen; i++) {
+        const ancUuid = ancestors[i];
+        const ancRec = ancestorRecordsByUuid[ancUuid];
+        const ancId = ancRec ? ancRec.id : ancUuid;
         breadcrumbs.push({
             name: pathTokens[i],
-            uuid: ancestors[i],
-            url: buildAreaUrl(ancestors[i], pathTokens[i]),
-            isCurrent: ancestors[i] === uuid || i === crumbLen - 1
+            id: ancId,
+            uuid: ancUuid,
+            url: buildAreaUrl(ancId, pathTokens[i]),
+            isCurrent: ancUuid === uuid || ancId === areaRecord.id || i === crumbLen - 1
         });
     }
     if (breadcrumbs.length === 0) {
         breadcrumbs.push({
             name,
+            id: areaRecord.id,
             uuid,
-            url: buildAreaUrl(uuid, name),
+            url: canonicalPath,
             isCurrent: true
         });
     }
@@ -1976,7 +2035,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             },
             lat: chGeo?.lat || 0,
             lng: chGeo?.lon || 0,
-            url: buildAreaUrl(chUuid, chName)
+            url: buildAreaUrl(ch.id, chName)
         };
     });
 
@@ -2020,7 +2079,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             } else if (typeof rawDisc === "string" && rawDisc) {
                 disciplines = [rawDisc];
             }
-        } catch (_) {}
+        } catch (_) { }
 
         let clPathTokens = [];
         try {
@@ -2030,9 +2089,9 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             } else if (typeof rawPt === "string" && rawPt.startsWith("[")) {
                 clPathTokens = JSON.parse(rawPt);
             }
-        } catch (_) {}
+        } catch (_) { }
 
-        const clAreaUuid = cl.getString("areaUuid") || "";
+        const clAreaId = cl.getString("area") || cl.getString("areaUuid") || "";
         const clSubAreaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "";
 
         const safety = cl.getString("safety") || "";
@@ -2074,14 +2133,14 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             createdByUser: cl.getString("createdByUser") || "",
             updatedByUser: cl.getString("updatedByUser") || "",
             subAreaName: clSubAreaName && clSubAreaName !== name ? clSubAreaName : "",
-            subAreaUrl: clAreaUuid && clSubAreaName ? buildAreaUrl(clAreaUuid, clSubAreaName) : ""
+            subAreaUrl: clAreaId && clSubAreaName ? buildAreaUrl(clAreaId, clSubAreaName) : ""
         };
     });
 
-    if (reqObj) {
+    if (reqObj && !shouldRedirect) {
         trackGAEvent(reqObj, "select_content", {
             content_type: "climbing_area",
-            item_id: uuid,
+            item_id: areaRecord.id,
             item_name: sanitizeSearchTerm(name)
         });
     }
@@ -2091,7 +2150,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         const pageDesc = description
             ? extractPreviewText(description).slice(0, 160)
             : `Explore ${formatNumberWithCommas(totalClimbs)} rock climbing routes, boulders, and crags in ${name}.`;
-        const canonicalUrl = `https://wiki-bloc.jkim.win${buildAreaUrl(uuid, name)}`;
+        const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
 
         setOrUpdateMeta(data.metadata, "title", pageTitle);
         setOrUpdateMeta(data.metadata, "og:title", pageTitle);
@@ -2122,7 +2181,9 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         children: formattedChildren,
         climbs: formattedClimbs,
         isDescendantClimbs: Boolean(isDescendantClimbs),
-        url: buildAreaUrl(uuid, name)
+        url: canonicalPath,
+        canonicalPath,
+        shouldRedirect
     };
 }
 
