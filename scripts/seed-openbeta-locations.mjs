@@ -134,8 +134,10 @@ function mapOpenBetaAreaToPayload(area, overrides = {}) {
         pathTokens: Array.isArray(area.pathTokens) ? area.pathTokens : [],
         ancestors,
         gradeContext: area.gradeContext || 'US',
-        lat: typeof area.metadata?.lat === 'number' ? area.metadata.lat : null,
-        lng: typeof area.metadata?.lng === 'number' ? area.metadata.lng : null,
+        coordinates:
+            typeof area.metadata?.lat === 'number' && typeof area.metadata?.lng === 'number'
+                ? { lon: area.metadata.lng, lat: area.metadata.lat }
+                : { lon: 0, lat: 0 },
         bbox: area.metadata?.bbox || null,
         leftRightIndex:
             typeof area.metadata?.leftRightIndex === 'number'

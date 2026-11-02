@@ -31,6 +31,10 @@ export type IsoAutoDateString = string & { readonly autodate: unique symbol }
 export type RecordIdString = string
 export type FileNameString = string & { readonly filename: unique symbol }
 export type HTMLString = string
+export type GeoPoint = {
+	lon: number
+	lat: number
+}
 
 type ExpandType<T> = unknown extends T
 	? T extends unknown
@@ -128,6 +132,7 @@ export type AreasRecord<
 	authorMetadata?: null | TauthorMetadata
 	bbox?: null | Tbbox
 	content?: null | Tcontent
+	coordinates?: GeoPoint
 	created: IsoAutoDateString
 	density?: number
 	description?: string
@@ -137,9 +142,7 @@ export type AreasRecord<
 	isDeleted?: boolean
 	isDestination?: boolean
 	isLeaf?: boolean
-	lat?: number
 	leftRightIndex?: number
-	lng?: number
 	metadata?: null | Tmetadata
 	mpId?: string
 	name: string
@@ -195,6 +198,7 @@ export type ClimbsRecord<
 	authorMetadata?: null | TauthorMetadata
 	boltsCount?: number
 	content?: null | Tcontent
+	coordinates?: GeoPoint
 	created: IsoAutoDateString
 	description?: string
 	disciplines?: ClimbDisciplinesOptions[]
@@ -220,10 +224,8 @@ export type ClimbsRecord<
 	isSport?: boolean
 	isTr?: boolean
 	isTrad?: boolean
-	lat?: number
 	leftRightIndex?: number
 	length?: number
-	lng?: number
 	location?: string
 	metadata?: null | Tmetadata
 	mpId?: string
@@ -391,6 +393,7 @@ export type ClimbingPostsStyleOptions = typeof ClimbingPostsStyleOptions[keyof t
 export type ClimbingPostsRecord = {
 	climbType?: ClimbingPostsClimbTypeOptions
 	content?: HTMLString
+	coordinates?: GeoPoint
 	coverImage?: FileNameString
 	created: IsoAutoDateString
 	date: IsoDateString

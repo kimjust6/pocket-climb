@@ -119,7 +119,22 @@ async function main() {
     }
 
     const usersCol = await pb.collections.getOne('users')
-    const climbingPostsCol = await pb.collections.getOne('climbing_posts')
+    let climbingPostsCol = await pb.collections.getOne('climbing_posts')
+
+    // Ensure `climbing_posts` also has a `coordinates` geoPoint field
+    const hasCoordsOnClimbingPosts = (climbingPostsCol.fields || []).some(
+        (f) => f.name === 'coordinates'
+    )
+    if (!hasCoordsOnClimbingPosts) {
+        const updatedClimbingPostsFields = [
+            ...(climbingPostsCol.fields || []),
+            { name: 'coordinates', type: 'geoPoint', required: false },
+        ]
+        climbingPostsCol = await pb.collections.update(climbingPostsCol.id, {
+            fields: updatedClimbingPostsFields,
+        })
+        console.log('Added coordinates (geoPoint) field to climbing_posts')
+    }
 
     // 1. Create/Update `areas` (initially without self-relation if not yet created)
     const baseAreasFields = [
@@ -133,8 +148,7 @@ async function main() {
         { name: 'ancestors', type: 'json', required: false },
         { name: 'pathHash', type: 'text', required: false },
         { name: 'gradeContext', type: 'text', required: false },
-        { name: 'lat', type: 'number', required: false },
-        { name: 'lng', type: 'number', required: false },
+        { name: 'coordinates', type: 'geoPoint', required: false },
         { name: 'bbox', type: 'json', required: false },
         { name: 'polygon', type: 'json', required: false },
         { name: 'leftRightIndex', type: 'number', onlyInt: true, required: false },
@@ -239,8 +253,7 @@ async function main() {
         { name: 'isAid', type: 'bool', required: false },
         { name: 'isDeepwatersolo', type: 'bool', required: false },
         { name: 'isSnow', type: 'bool', required: false },
-        { name: 'lat', type: 'number', required: false },
-        { name: 'lng', type: 'number', required: false },
+        { name: 'coordinates', type: 'geoPoint', required: false },
         { name: 'leftRightIndex', type: 'number', onlyInt: true, required: false },
         { name: 'description', type: 'text', required: false },
         { name: 'location', type: 'text', required: false },

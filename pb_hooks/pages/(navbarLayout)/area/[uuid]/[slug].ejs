@@ -207,6 +207,16 @@
                                             • <%= climb.boltsCount %> bolts
                                         </span>
                                     <% } %>
+                                    <% if (climb.hasCoords) { %>
+                                        <a href="https://www.google.com/maps/search/?api=1&query=<%= climb.lat %>,<%= climb.lng %>"
+                                            target="_blank" rel="noopener noreferrer"
+                                            class="text-xs text-accent hover:underline font-mono inline-flex items-center gap-1 ml-auto">
+                                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+                                                <path fill-rule="evenodd" d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z" clip-rule="evenodd" />
+                                            </svg>
+                                            <%= climb.lat.toFixed(4) %>, <%= climb.lng.toFixed(4) %>
+                                        </a>
+                                    <% } %>
                                 </div>
 
                                 <% if (climb.description) { %>

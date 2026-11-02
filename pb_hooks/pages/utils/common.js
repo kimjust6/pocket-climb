@@ -1707,6 +1707,7 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         const uuid = r.getString("openbetaUuid");
         const name = r.getString("name");
         const totalClimbs = r.getInt("totalClimbs") || 0;
+        const geoPoint = r.getGeoPoint("coordinates");
         let pathTokens = [];
         try {
             const rawTokens = r.get("pathTokens");
@@ -1727,8 +1728,12 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             formattedClimbs: formatNumberWithCommas(totalClimbs),
             isDestination: r.getBool("isDestination"),
             isBoulder: r.getBool("isBoulder"),
-            lat: r.getFloat("lat"),
-            lng: r.getFloat("lng"),
+            coordinates: {
+                lon: geoPoint?.lon || 0,
+                lat: geoPoint?.lat || 0
+            },
+            lat: geoPoint?.lat || 0,
+            lng: geoPoint?.lon || 0,
             pathTokens,
             url: buildAreaUrl(uuid, name)
         };
@@ -1905,8 +1910,9 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const totalClimbs = areaRecord.getInt("totalClimbs") || climbs.length || 0;
     const description = areaRecord.getString("description") || "";
     const areaLocation = areaRecord.getString("areaLocation") || "";
-    const lat = areaRecord.getFloat("lat");
-    const lng = areaRecord.getFloat("lng");
+    const areaGeo = areaRecord.getGeoPoint("coordinates");
+    const lat = areaGeo?.lat || 0;
+    const lng = areaGeo?.lon || 0;
     const shortCode = areaRecord.getString("shortCode") || "";
 
     let pathTokens = [];
@@ -1951,6 +1957,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         const chUuid = ch.getString("openbetaUuid");
         const chName = ch.getString("name");
         const chClimbs = ch.getInt("totalClimbs") || 0;
+        const chGeo = ch.getGeoPoint("coordinates");
         return {
             id: ch.id,
             uuid: chUuid,
@@ -1961,8 +1968,12 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             isDestination: ch.getBool("isDestination"),
             isLeaf: ch.getBool("isLeaf"),
             isBoulder: ch.getBool("isBoulder"),
-            lat: ch.getFloat("lat"),
-            lng: ch.getFloat("lng"),
+            coordinates: {
+                lon: chGeo?.lon || 0,
+                lat: chGeo?.lat || 0
+            },
+            lat: chGeo?.lat || 0,
+            lng: chGeo?.lon || 0,
             url: buildAreaUrl(chUuid, chName)
         };
     });
@@ -1987,6 +1998,9 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         } catch (_) {}
 
         const safety = cl.getString("safety") || "";
+        const clGeo = cl.getGeoPoint("coordinates");
+        const clLat = clGeo?.lat || 0;
+        const clLng = clGeo?.lon || 0;
         return {
             id: cl.id,
             uuid: cl.getString("openbetaUuid"),
@@ -2001,6 +2015,13 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             gradeFrench,
             gradeFont,
             disciplines,
+            coordinates: {
+                lon: clLng,
+                lat: clLat
+            },
+            lat: clLat,
+            lng: clLng,
+            hasCoords: typeof clLat === "number" && typeof clLng === "number" && (clLat !== 0 || clLng !== 0),
             description: cl.getString("description") || "",
             location: cl.getString("location") || "",
             protection: cl.getString("protection") || ""

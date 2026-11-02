@@ -1021,11 +1021,11 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
             record.set("ancestors", ancestors);
         }
         record.set("gradeContext", String(areaObj.gradeContext || "US"));
-        if (typeof areaObj.metadata?.lat === "number") {
-            record.set("lat", areaObj.metadata.lat);
-        }
-        if (typeof areaObj.metadata?.lng === "number") {
-            record.set("lng", areaObj.metadata.lng);
+        if (typeof areaObj.metadata?.lat === "number" && typeof areaObj.metadata?.lng === "number") {
+            record.set("coordinates", {
+                lon: areaObj.metadata.lng,
+                lat: areaObj.metadata.lat
+            });
         }
         if (areaObj.metadata?.bbox) {
             record.set("bbox", areaObj.metadata.bbox);
@@ -1151,11 +1151,11 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId) {
         record.set("isAid", Boolean(typeObj.aid));
         record.set("isDeepwatersolo", Boolean(typeObj.deepwatersolo));
         record.set("isSnow", Boolean(typeObj.snow));
-        if (typeof climbObj.metadata?.lat === "number") {
-            record.set("lat", climbObj.metadata.lat);
-        }
-        if (typeof climbObj.metadata?.lng === "number") {
-            record.set("lng", climbObj.metadata.lng);
+        if (typeof climbObj.metadata?.lat === "number" && typeof climbObj.metadata?.lng === "number") {
+            record.set("coordinates", {
+                lon: climbObj.metadata.lng,
+                lat: climbObj.metadata.lat
+            });
         }
         if (typeof climbObj.metadata?.leftRightIndex === "number") {
             record.set("leftRightIndex", climbObj.metadata.leftRightIndex);
