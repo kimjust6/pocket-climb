@@ -1,10 +1,11 @@
 // Wiki Bloc Service Worker - Static Asset & Image Caching Only (HTML/Theme is never cached)
-const CACHE_VERSION = 'v4';
+const CACHE_VERSION = 'v5';
 const STATIC_CACHE = `justin-static-${CACHE_VERSION}`;
 const IMAGES_CACHE = `justin-images-${CACHE_VERSION}`;
 
 const PRECACHE_ASSETS = [
     '/app.css',
+    '/js/vue.global.prod.js',
     '/site.webmanifest',
     '/favicon.svg',
     '/favicon-32x32.png',

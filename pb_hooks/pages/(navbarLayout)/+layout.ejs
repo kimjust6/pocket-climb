@@ -71,7 +71,6 @@
 
         <!-- Styles & Preconnects -->
         <link href="<%=asset('/app.css')%>" rel="stylesheet" />
-        <link rel="preconnect" href="https://unpkg.com" crossorigin />
         <link rel="preconnect" href="https://www.googletagmanager.com" crossorigin />
 
         <!-- Structured Data (JSON-LD) -->
@@ -143,7 +142,15 @@
             ]
         }
         </script>
-        <script src="https://unpkg.com/petite-vue" defer init></script>
+        <!-- Vue 3 (No-Build Mode - Local) -->
+        <script type="importmap">
+        {
+            "imports": {
+                "vue": "/js/vue.esm-browser.prod.js"
+            }
+        }
+        </script>
+        <script src="/js/vue.global.prod.js"></script>
         <script type="module">
             function syncThemeIcons(theme) {
                 const currentTheme = theme || document.documentElement.getAttribute('data-theme') || 'dark';
