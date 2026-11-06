@@ -5,50 +5,51 @@
 </script>
 
 <script>
-    var LocationDirectoryApp = {
-        data() {
-            return {
-                searchQuery: decodeURIComponent('<%- encodeURIComponent(directoryView.searchQuery || "").replace(/\'/g, "%27") %>'),
-                countryFilter: '<%= directoryView.countryFilter %>'
-            };
-        },
-        methods: {
-            handleSearch() {
-                const q = (this.searchQuery || '').trim();
-                const params = new URLSearchParams();
-                if (q) params.set('query', q);
-                if (this.countryFilter && this.countryFilter !== 'ALL') {
-                    params.set('country', this.countryFilter);
-                }
-                const qs = params.toString();
-                window.location.href = qs ? `/?${qs}` : '/';
-            },
-            clearSearch() {
-                this.searchQuery = '';
-                if (this.countryFilter && this.countryFilter !== 'ALL') {
-                    window.location.href = `/?country=${encodeURIComponent(this.countryFilter)}`;
-                } else {
-                    window.location.href = '/';
-                }
-            }
-        }
-    };
+(function () {
+    const { createApp, ref } = Vue;
 
-    function initLocationDirectoryApp() {
-        const root = document.getElementById('location-directory-app');
-        if (root && window.Vue && !root.__vue_app__) {
-            Vue.createApp(LocationDirectoryApp).mount(root);
+    const searchQuery = ref(decodeURIComponent('<%- encodeURIComponent(directoryView.searchQuery || "").replace(/\'/g, "%27") %>'));
+    const countryFilter = '<%= directoryView.countryFilter %>';
+
+    function handleSearch() {
+        const q = (searchQuery.value || '').trim();
+        const params = new URLSearchParams();
+        if (q) params.set('query', q);
+        if (countryFilter && countryFilter !== 'ALL') {
+            params.set('country', countryFilter);
         }
+        const qs = params.toString();
+        window.location.href = qs ? `/?${qs}` : '/';
+    }
+
+    function clearSearch() {
+        searchQuery.value = '';
+        if (countryFilter && countryFilter !== 'ALL') {
+            window.location.href = `/?country=${encodeURIComponent(countryFilter)}`;
+        } else {
+            window.location.href = '/';
+        }
+    }
+
+    function mount() {
+        const root = document.getElementById('location-directory-app');
+        if (!root || root.__vue_app__) return;
+        createApp({
+            setup() {
+                return { searchQuery, handleSearch, clearSearch };
+            }
+        }).mount(root);
     }
 
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initLocationDirectoryApp);
+        document.addEventListener('DOMContentLoaded', mount);
     } else {
-        initLocationDirectoryApp();
+        mount();
     }
+})();
 </script>
 
-<div id="location-directory-app" class="bg-base-100 pt-10 pb-20 not-prose">
+<div id="location-directory-app" v-cloak class="bg-base-100 pt-10 pb-20 not-prose">
     <div class="max-w-6xl mx-auto px-4 sm:px-6">
 
         <!-- OpenBeta-style Quick Country Nav & Search Bar -->

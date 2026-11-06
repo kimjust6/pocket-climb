@@ -153,6 +153,11 @@ input:-webkit-autofill:active {
     navigation: auto;
 }
 
+/* Hide Vue-controlled elements until Vue has mounted (prevents flash of raw template markup) */
+[v-cloak] {
+    display: none !important;
+}
+
 /* Isolate and freeze navbar so it never fades, flashes, or re-animates during transitions */
 .navbar-persistent {
     view-transition-name: main-navbar;

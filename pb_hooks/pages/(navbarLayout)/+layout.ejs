@@ -28,7 +28,7 @@
             http-equiv="Content-Security-Policy"
             content="
                 default-src 'self';
-                script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.youtube.com https://youtube.com https://*.ytimg.com https://unpkg.com https://www.googletagmanager.com https://www.google.com https://cdnjs.cloudflare.com;
+                script-src 'self' 'unsafe-inline' 'unsafe-eval' https://*.youtube.com https://youtube.com https://*.ytimg.com https://www.googletagmanager.com https://www.google.com https://cdnjs.cloudflare.com;
                 frame-src 'self' https://*.youtube.com https://youtube.com https://*.youtube-nocookie.com;
                 img-src 'self' data: blob: https://*.ytimg.com https://*.youtube.com https://*.ggpht.com https://www.google.com https://www.googletagmanager.com;
                 connect-src 'self' https://*.youtube.com https://youtubei.googleapis.com https://yt3.ggpht.com https://www.google-analytics.com https://www.googletagmanager.com;
@@ -151,64 +151,62 @@
         }
         </script>
         <script src="/js/vue.global.prod.js"></script>
-        <script type="module">
-            function syncThemeIcons(theme) {
-                const currentTheme = theme || document.documentElement.getAttribute('data-theme') || 'dark';
-                const sun = document.getElementById('theme-icon-sun');
-                const moon = document.getElementById('theme-icon-moon');
-                if (sun) sun.style.display = currentTheme === 'dark' ? 'inline-block' : 'none';
-                if (moon) moon.style.display = currentTheme === 'nord' ? 'inline-block' : 'none';
-            }
-
-            function toggleTheme() {
-                const html = document.documentElement;
-                const currentTheme = html.getAttribute('data-theme') === 'nord' ? 'nord' : 'dark';
-                const newTheme = currentTheme === 'dark' ? 'nord' : 'dark';
-
-                html.setAttribute('data-theme', newTheme);
-                try {
-                    localStorage.setItem('theme', newTheme);
-                } catch (_) {}
-                document.cookie = `theme=${newTheme}; path=/; max-age=31536000; SameSite=Lax`;
-
-                if (newTheme === 'dark') {
-                    html.classList.add('dark');
-                } else {
-                    html.classList.remove('dark');
+        <script>
+            /* Theme toggle — runs synchronously so there is no flash of unstyled icons.
+               Exposed as window.toggleTheme so the navbar button can call it inline. */
+            (function () {
+                function syncThemeIcons(theme) {
+                    var currentTheme = theme || document.documentElement.getAttribute('data-theme') || 'dark';
+                    var sun = document.getElementById('theme-icon-sun');
+                    var moon = document.getElementById('theme-icon-moon');
+                    if (sun) sun.style.display = currentTheme === 'dark' ? 'inline-block' : 'none';
+                    if (moon) moon.style.display = currentTheme === 'nord' ? 'inline-block' : 'none';
                 }
 
-                syncThemeIcons(newTheme);
-            }
-            window.toggleTheme = toggleTheme;
+                function toggleTheme() {
+                    var html = document.documentElement;
+                    var currentTheme = html.getAttribute('data-theme') === 'nord' ? 'nord' : 'dark';
+                    var newTheme = currentTheme === 'dark' ? 'nord' : 'dark';
 
-            // Sync icons on page load and back/forward restore
-            syncThemeIcons();
-            document.addEventListener('DOMContentLoaded', () => syncThemeIcons());
-            window.addEventListener('pageshow', () => syncThemeIcons());
+                    html.setAttribute('data-theme', newTheme);
+                    try { localStorage.setItem('theme', newTheme); } catch (_) {}
+                    document.cookie = 'theme=' + newTheme + '; path=/; max-age=31536000; SameSite=Lax';
+                    html.classList.toggle('dark', newTheme === 'dark');
+                    syncThemeIcons(newTheme);
+                }
+
+                window.toggleTheme = toggleTheme;
+
+                // Sync icons on page load and back/forward restore
+                document.addEventListener('DOMContentLoaded', function () { syncThemeIcons(); });
+                window.addEventListener('pageshow', function () { syncThemeIcons(); });
+            })();
 
             // Register Service Worker for local caching and offline support
             if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                    navigator.serviceWorker.register('/sw.js').catch((err) => {
+                window.addEventListener('load', function () {
+                    navigator.serviceWorker.register('/sw.js').catch(function (err) {
                         console.debug('SW registration skipped:', err);
                     });
                 });
             }
 
             // Link hover prefetching for instant page navigation
-            const prefetchedUrls = new Set();
-            document.addEventListener('pointerenter', (e) => {
-                const a = e.target && e.target.closest ? e.target.closest('a') : null;
-                if (a && a.href && a.origin === location.origin && !a.hasAttribute('download')) {
-                    if (!prefetchedUrls.has(a.href)) {
-                        prefetchedUrls.add(a.href);
-                        const link = document.createElement('link');
-                        link.rel = 'prefetch';
-                        link.href = a.href;
-                        document.head.appendChild(link);
+            (function () {
+                var prefetchedUrls = new Set();
+                document.addEventListener('pointerenter', function (e) {
+                    var a = e.target && e.target.closest ? e.target.closest('a') : null;
+                    if (a && a.href && a.origin === location.origin && !a.hasAttribute('download')) {
+                        if (!prefetchedUrls.has(a.href)) {
+                            prefetchedUrls.add(a.href);
+                            var link = document.createElement('link');
+                            link.rel = 'prefetch';
+                            link.href = a.href;
+                            document.head.appendChild(link);
+                        }
                     }
-                }
-            }, { passive: true, capture: true });
+                }, { passive: true, capture: true });
+            })();
         </script>
         <!-- Google tag (gtag.js) -->
         <script
