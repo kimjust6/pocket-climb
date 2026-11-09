@@ -1,7 +1,7 @@
 {
     "description": "DO NOT DELETE THIS FILE. This file is used to keep track of which files have been synced in the most recent deployment. If you delete this file a resync will need to be done (which can take a while) - read more: https://github.com/SamKirkland/FTP-Deploy-Action",
     "version": "1.0.0",
-    "generatedTime": 1793941988956,
+    "generatedTime": 1793947645506,
     "data": [
         {
             "type": "folder",
@@ -14,8 +14,8 @@
         {
             "type": "file",
             "name": "pb_public/sw.js",
-            "size": 3938,
-            "hash": "7a269c29b68c8a6181bc80ec6856d1ac1d26b02bdef244942333f8b6472436d2"
+            "size": 3968,
+            "hash": "11f8c540990cfb1f67a9b78436254e38a36ecccad0a5f54e023242917247b3c2"
         },
         {
             "type": "file",
@@ -89,9 +89,15 @@
         },
         {
             "type": "file",
-            "name": "pb_public/js/petite-vue.es.js",
-            "size": 17033,
-            "hash": "f17d90e493295133d491e84c04e3a56a77e82eaafe20fd75f3625aa6a2c62ddd"
+            "name": "pb_public/js/vue.global.prod.js",
+            "size": 172939,
+            "hash": "0287592e25a077b6190b721db9903d253d936778dab50cbde0d6010c1f51d262"
+        },
+        {
+            "type": "file",
+            "name": "pb_public/js/vue.esm-browser.prod.js",
+            "size": 177765,
+            "hash": "a1c408b5bd9b941838db315ea6cadb4e485c66b73cca043250eee071234c04a9"
         },
         {
             "type": "file",
@@ -154,14 +160,14 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/app.tailwind.css",
-            "size": 8371,
-            "hash": "951874af3591cff93818fda1874c1c3d104e0e6cb0888bedbf6b2ab97e949a8a"
+            "size": 8513,
+            "hash": "1aec4fd28e03e1d1e98896804874e4eb2d7642df4797d835cd73a1b79a332c09"
         },
         {
             "type": "file",
             "name": "pb_hooks/pages/app.css",
-            "size": 96664,
-            "hash": "c33647c610d0bca43912af346ea26e07e6ae50e67ce4734527f60b937dab54e7"
+            "size": 100189,
+            "hash": "41d248e662d696b938d319b1c444b1a467db2f9efdd76496b9f7be192e6097ef"
         },
         {
             "type": "folder",
@@ -276,8 +282,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/_private/openbeta-directory.ejs",
-            "size": 17842,
-            "hash": "d60786a028babf6fd97860c3ad17948d85e03799c220c52715a26b385cb8b6aa"
+            "size": 18236,
+            "hash": "9e854624e547f240046e03cd296036abb160f2b1a0d8d26f900dc90de124b958"
         },
         {
             "type": "file",
@@ -352,8 +358,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/(navbarLayout)/+layout.ejs",
-            "size": 11402,
-            "hash": "610576bbf415c7675630bb912cb69dc23356a88acb48431acc48dab8ca715e65"
+            "size": 11742,
+            "hash": "84b3b5aaa65402dec75f3ec7724136a3b613df8e9f8450a0b115ed6ce9b147f7"
         },
         {
             "type": "file",

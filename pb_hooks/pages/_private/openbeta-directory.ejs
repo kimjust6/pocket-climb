@@ -6,39 +6,96 @@
 
 <script>
 (function () {
-    const { createApp, ref } = Vue;
+    const { createApp, ref, watch } = Vue;
+    const hasRouter = typeof VueRouter !== 'undefined';
 
-    const searchQuery = ref(decodeURIComponent('<%- encodeURIComponent(directoryView.searchQuery || "").replace(/\'/g, "%27") %>'));
-    const countryFilter = '<%= directoryView.countryFilter %>';
+    const router = hasRouter ? VueRouter.createRouter({
+        history: VueRouter.createWebHistory(),
+        routes: [
+            { path: '/:pathMatch(.*)*', component: { render: () => null } }
+        ]
+    }) : null;
 
-    function handleSearch() {
-        const q = (searchQuery.value || '').trim();
-        const params = new URLSearchParams();
-        if (q) params.set('query', q);
-        if (countryFilter && countryFilter !== 'ALL') {
-            params.set('country', countryFilter);
+    const app = createApp({
+        setup() {
+            const countryFilter = '<%= directoryView.countryFilter %>';
+            const serverQuery = decodeURIComponent('<%- encodeURIComponent(directoryView.searchQuery || "").replace(/\'/g, "%27") %>');
+
+            let route = null;
+            let routerInstance = null;
+            if (hasRouter) {
+                route = VueRouter.useRoute();
+                routerInstance = VueRouter.useRouter();
+            }
+
+            const initialQuery = (route && route.query && typeof route.query.query === 'string')
+                ? route.query.query
+                : serverQuery;
+            const searchQuery = ref(initialQuery);
+
+            if (route) {
+                watch(() => route.query.query, (newQ) => {
+                    searchQuery.value = typeof newQ === 'string' ? newQ : '';
+                });
+            }
+
+            function handleSearch() {
+                const q = (searchQuery.value || '').trim();
+                const queryObj = {};
+                if (q) queryObj.query = q;
+                if (countryFilter && countryFilter !== 'ALL') {
+                    queryObj.country = countryFilter;
+                }
+
+                if (routerInstance) {
+                    const target = routerInstance.resolve({ path: '/', query: queryObj }).href;
+                    window.location.href = target;
+                } else {
+                    const params = new URLSearchParams(queryObj);
+                    const qs = params.toString();
+                    window.location.href = qs ? `/?${qs}` : '/';
+                }
+            }
+
+            function clearSearch() {
+                searchQuery.value = '';
+                const queryObj = {};
+                if (countryFilter && countryFilter !== 'ALL') {
+                    queryObj.country = countryFilter;
+                }
+
+                if (routerInstance) {
+                    const target = routerInstance.resolve({ path: '/', query: queryObj }).href;
+                    window.location.href = target;
+                } else {
+                    const qs = countryFilter && countryFilter !== 'ALL'
+                        ? `?country=${encodeURIComponent(countryFilter)}`
+                        : '';
+                    window.location.href = `/${qs}`;
+                }
+            }
+
+            return { searchQuery, handleSearch, clearSearch };
         }
-        const qs = params.toString();
-        window.location.href = qs ? `/?${qs}` : '/';
-    }
+    });
 
-    function clearSearch() {
-        searchQuery.value = '';
-        if (countryFilter && countryFilter !== 'ALL') {
-            window.location.href = `/?country=${encodeURIComponent(countryFilter)}`;
-        } else {
-            window.location.href = '/';
-        }
+    if (router) {
+        app.use(router);
     }
 
     function mount() {
         const root = document.getElementById('location-directory-app');
         if (!root || root.__vue_app__) return;
-        createApp({
-            setup() {
-                return { searchQuery, handleSearch, clearSearch };
-            }
-        }).mount(root);
+
+        if (router) {
+            router.isReady().then(() => {
+                if (!root.__vue_app__) {
+                    app.mount(root);
+                }
+            });
+        } else {
+            app.mount(root);
+        }
     }
 
     if (document.readyState === 'loading') {
