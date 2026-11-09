@@ -241,4 +241,75 @@ onRecordAfterCreateSuccess((e) => {
         handleSendMessage(data, new Date(e.record.get("created")));
     }
 
-}, "zendesk_tickets")
+}, "zendesk_tickets");
+
+/**
+ * OpenBeta Climbs Sync Endpoint
+ *
+ * GET/POST /api/openbeta/update-climbs
+ * GET/POST /api/climbs/update
+ *
+ * Queries OpenBeta (https://api.openbeta.io/) and updates climbs with the fewest requests possible:
+ * 1. "areas" mode (default): Bundles up to 50-60 leaf areas per request using GraphQL aliases,
+ *    updating all ~22,000+ local climbs in only ~35-42 HTTP requests!
+ * 2. "catalog" mode: Paginates OpenBeta global leaf areas with limit=100 crags per request.
+ * 3. Specific Area: If areaUuid is provided, syncs that area in 1 single HTTP request.
+ */
+function handleUpdateClimbsRequest(e) {
+    const { updateClimbsFromOpenBeta, getLastClimbsSyncStats } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    let query = {};
+    let body = {};
+    try {
+        const info = e.requestInfo();
+        query = info?.query || {};
+        body = info?.body || {};
+    } catch (_) {}
+
+    const getParam = (key) => (body && body[key] !== undefined ? body[key] : (query && query[key] !== undefined ? query[key] : undefined));
+
+    const isStatusQuery = String(getParam("status") || "").toLowerCase();
+    if (isStatusQuery === "1" || isStatusQuery === "true") {
+        return e.json(200, {
+            status: "ok",
+            lastSync: getLastClimbsSyncStats(),
+        });
+    }
+
+    const mode = getParam("mode") || "areas";
+    const batchSize = parseInt(getParam("batchSize") || getParam("batch_size") || 0, 10);
+    const limit = parseInt(getParam("limit") || 0, 10);
+    const offset = parseInt(getParam("offset") || 0, 10);
+    const all = String(getParam("all") || "").toLowerCase() === "true" || getParam("all") === true;
+    const dryRun = String(getParam("dryRun") || getParam("dry_run") || "").toLowerCase() === "true" || getParam("dryRun") === true;
+    const areaUuid = getParam("areaUuid") || getParam("area_uuid") || getParam("area");
+    const timeoutSeconds = parseInt(getParam("timeoutSeconds") || getParam("timeout") || -1, 10);
+
+    try {
+        const stats = updateClimbsFromOpenBeta({
+            mode,
+            batchSize: batchSize > 0 ? batchSize : undefined,
+            limit: limit > 0 ? limit : undefined,
+            offset,
+            all,
+            dryRun,
+            areaUuid,
+            timeoutSeconds: timeoutSeconds >= 0 ? timeoutSeconds : undefined,
+        });
+
+        const httpStatus = stats.status === "error" ? 500 : (stats.status === "partial_success" ? 206 : 200);
+        return e.json(httpStatus, stats);
+    } catch (err) {
+        $app.logger().error("Failed to update climbs from OpenBeta", "error", err);
+        return e.json(500, {
+            status: "error",
+            message: "Failed to update climbs from OpenBeta",
+            error: err?.message || String(err),
+        });
+    }
+}
+
+routerAdd("POST", "/api/openbeta/update-climbs", handleUpdateClimbsRequest);
+routerAdd("GET", "/api/openbeta/update-climbs", handleUpdateClimbsRequest);
+routerAdd("POST", "/api/climbs/update", handleUpdateClimbsRequest);
+routerAdd("GET", "/api/climbs/update", handleUpdateClimbsRequest);

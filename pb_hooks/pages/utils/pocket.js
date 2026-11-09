@@ -38,7 +38,12 @@ module.exports = {
     getTicksByClimbId,
     getOrganizations,
     getClimbMedia,
-    getOrSyncAreaDetail
+    getOrSyncAreaDetail,
+    upsertOpenBetaAreaRecord,
+    upsertOpenBetaClimbRecord,
+    upsertOpenBetaPitchRecord,
+    updateClimbsFromOpenBeta,
+    getLastClimbsSyncStats,
 }
 
 /**
@@ -642,15 +647,16 @@ function getDatabaseCatalogStats(usaUuid = "") {
  * @param {string} [parentRecordId]
  * @returns {Record|null}
  */
-function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
+function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId, customApp = null) {
     if (!areaObj || !areaObj.uuid) return null;
+    const app = customApp || $app;
     try {
-        const collection = $app.findCollectionByNameOrId(POCKET_AREAS);
+        const collection = app.findCollectionByNameOrId(POCKET_AREAS);
         if (!collection) return null;
 
         let record = null;
         try {
-            record = $app.findFirstRecordByFilter(
+            record = app.findFirstRecordByFilter(
                 POCKET_AREAS,
                 "openbetaUuid = {:uuid}",
                 { uuid: areaObj.uuid }
@@ -676,7 +682,7 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
         let resolvedParentId = parentRecordId || "";
         if (finalParentUuid && (!resolvedParentId || (overrideParentUuid && finalParentUuid !== overrideParentUuid))) {
             try {
-                const parentRec = $app.findFirstRecordByFilter(
+                const parentRec = app.findFirstRecordByFilter(
                     POCKET_AREAS,
                     "openbetaUuid = {:pUuid}",
                     { pUuid: finalParentUuid }
@@ -762,7 +768,7 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
         }
         record.set("isDeleted", false);
 
-        $app.save(record);
+        app.save(record);
         return record;
     } catch (err) {
         $app.logger().error("Failed to upsert OpenBeta area record", "uuid", areaObj?.uuid, "error", err);
@@ -777,15 +783,16 @@ function upsertOpenBetaAreaRecord(areaObj, overrideParentUuid, parentRecordId) {
  * @param {string} areaRecordId
  * @returns {Record|null}
  */
-function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId, parentAreaObj = null) {
+function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId, parentAreaObj = null, customApp = null) {
     if (!climbObj || !climbObj.uuid) return null;
+    const app = customApp || $app;
     try {
-        const collection = $app.findCollectionByNameOrId(POCKET_CLIMBS);
+        const collection = app.findCollectionByNameOrId(POCKET_CLIMBS);
         if (!collection) return null;
 
         let record = null;
         try {
-            record = $app.findFirstRecordByFilter(
+            record = app.findFirstRecordByFilter(
                 POCKET_CLIMBS,
                 "openbetaUuid = {:uuid}",
                 { uuid: climbObj.uuid }
@@ -904,25 +911,25 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId, parentAreaO
         }
         record.set("isDeleted", false);
 
-        $app.save(record);
+        app.save(record);
 
         // Upsert child pitches if provided
         if (pitchesArr.length > 0) {
             for (let pIdx = 0; pIdx < pitchesArr.length; pIdx++) {
-                upsertOpenBetaPitchRecord(pitchesArr[pIdx], climbObj.uuid, record.id, pIdx + 1);
+                upsertOpenBetaPitchRecord(pitchesArr[pIdx], climbObj.uuid, record.id, pIdx + 1, app);
             }
         }
 
         // Upsert climb media if provided
         const mediaArr = Array.isArray(climbObj.media) ? climbObj.media : [];
         for (let mIdx = 0; mIdx < mediaArr.length; mIdx++) {
-            upsertOpenBetaMediaRecord(mediaArr[mIdx], { areaId: areaRecordId, climbId: record.id });
+            upsertOpenBetaMediaRecord(mediaArr[mIdx], { areaId: areaRecordId, climbId: record.id }, app);
         }
 
         // Upsert climb ticks if provided
         const ticksArr = Array.isArray(climbObj.ticks) ? climbObj.ticks : [];
         for (let tIdx = 0; tIdx < ticksArr.length; tIdx++) {
-            upsertOpenBetaTickRecord(ticksArr[tIdx], climbObj.uuid, record.id, climbObj.name);
+            upsertOpenBetaTickRecord(ticksArr[tIdx], climbObj.uuid, record.id, climbObj.name, app);
         }
 
         return record;
@@ -935,16 +942,17 @@ function upsertOpenBetaClimbRecord(climbObj, areaUuid, areaRecordId, parentAreaO
 /**
  * Upsert an OpenBeta Pitch object into the `pitches` collection
  */
-function upsertOpenBetaPitchRecord(pitchObj, climbUuid, climbRecordId, defaultPitchNum = 1) {
+function upsertOpenBetaPitchRecord(pitchObj, climbUuid, climbRecordId, defaultPitchNum = 1, customApp = null) {
     if (!pitchObj || !climbRecordId) return null;
+    const app = customApp || $app;
     try {
-        const collection = $app.findCollectionByNameOrId(POCKET_PITCHES);
+        const collection = app.findCollectionByNameOrId(POCKET_PITCHES);
         if (!collection) return null;
 
         const pitchNum = typeof pitchObj.pitchNumber === "number" ? pitchObj.pitchNumber : defaultPitchNum;
         let record = null;
         try {
-            record = $app.findFirstRecordByFilter(
+            record = app.findFirstRecordByFilter(
                 POCKET_PITCHES,
                 "climb = {:climbId} && pitchNumber = {:pitchNum}",
                 { climbId: climbRecordId, pitchNum }
@@ -984,7 +992,7 @@ function upsertOpenBetaPitchRecord(pitchObj, climbUuid, climbRecordId, defaultPi
         if (pitchObj.type) record.set("type", pitchObj.type);
         record.set("isDeleted", false);
 
-        $app.save(record);
+        app.save(record);
         return record;
     } catch (_) {
         return null;
@@ -994,15 +1002,16 @@ function upsertOpenBetaPitchRecord(pitchObj, climbUuid, climbRecordId, defaultPi
 /**
  * Upsert an OpenBeta Media object into the `climb_media` collection
  */
-function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {}) {
+function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {}, customApp = null) {
     if (!mediaObj || !mediaObj.mediaUrl) return null;
+    const app = customApp || $app;
     try {
-        const collection = $app.findCollectionByNameOrId(POCKET_CLIMB_MEDIA);
+        const collection = app.findCollectionByNameOrId(POCKET_CLIMB_MEDIA);
         if (!collection) return null;
 
         let record = null;
         try {
-            record = $app.findFirstRecordByFilter(
+            record = app.findFirstRecordByFilter(
                 POCKET_CLIMB_MEDIA,
                 "mediaUrl = {:url}",
                 { url: mediaObj.mediaUrl }
@@ -1030,7 +1039,7 @@ function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {})
         if (mediaObj.userProfile || mediaObj.user) record.set("userProfile", mediaObj.userProfile || mediaObj.user);
         record.set("isDeleted", false);
 
-        $app.save(record);
+        app.save(record);
         return record;
     } catch (_) {
         return null;
@@ -1040,17 +1049,18 @@ function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {})
 /**
  * Upsert an OpenBeta Tick object into the `ticks` collection
  */
-function upsertOpenBetaTickRecord(tickObj, climbUuid, climbRecordId, climbName = "") {
+function upsertOpenBetaTickRecord(tickObj, climbUuid, climbRecordId, climbName = "", customApp = null) {
     if (!tickObj || !climbUuid) return null;
+    const app = customApp || $app;
     try {
-        const collection = $app.findCollectionByNameOrId(POCKET_TICKS);
+        const collection = app.findCollectionByNameOrId(POCKET_TICKS);
         if (!collection) return null;
 
         const openbetaId = String(tickObj._id || "");
         let record = null;
         if (openbetaId) {
             try {
-                record = $app.findFirstRecordByFilter(
+                record = app.findFirstRecordByFilter(
                     POCKET_TICKS,
                     "openbetaId = {:obId}",
                     { obId: openbetaId }
@@ -1077,7 +1087,7 @@ function upsertOpenBetaTickRecord(tickObj, climbUuid, climbRecordId, climbName =
         if (tickObj.userProfile) record.set("userProfile", tickObj.userProfile);
         record.set("isDeleted", false);
 
-        $app.save(record);
+        app.save(record);
         return record;
     } catch (_) {
         return null;
@@ -1337,6 +1347,435 @@ function getOrSyncAreaDetail(idOrUuid) {
         isDescendantClimbs
     };
 }
+
+let lastClimbsSyncStats = null;
+
+function getLastClimbsSyncStats() {
+    return lastClimbsSyncStats;
+}
+
+const OPENBETA_CLIMB_FIELDS_FRAGMENT = `
+fragment ClimbFields on Climb {
+    id
+    uuid
+    name
+    fa
+    length
+    boltsCount
+    safety
+    gradeContext
+    grades {
+        yds
+        vscale
+        font
+        french
+        ewbank
+        brazilianCrux
+        uiaa
+        wi
+    }
+    type {
+        trad
+        sport
+        bouldering
+        tr
+        alpine
+        ice
+        mixed
+        aid
+        deepwatersolo
+        snow
+    }
+    metadata {
+        lat
+        lng
+        leftRightIndex
+        mp_id
+        climb_id
+    }
+    content {
+        description
+        location
+        protection
+    }
+    pathTokens
+    ancestors
+    authorMetadata {
+        createdAt
+        createdBy
+        createdByUser
+        updatedAt
+        updatedBy
+        updatedByUser
+    }
+    pitches {
+        id
+        parentId
+        pitchNumber
+        length
+        boltsCount
+        description
+        grades {
+            yds
+            vscale
+            font
+            french
+            ewbank
+            brazilianCrux
+            uiaa
+            wi
+        }
+        type {
+            trad
+            sport
+            bouldering
+            tr
+            alpine
+            ice
+            mixed
+            aid
+            deepwatersolo
+            snow
+        }
+    }
+}
+`;
+
+function sendOpenBetaGraphQL(query, variables = {}, retries = 2) {
+    let lastErr = null;
+    for (let attempt = 1; attempt <= retries + 1; attempt++) {
+        try {
+            const res = $http.send({
+                url: OPENBETA_API_ENDPOINT,
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "User-Agent": "PocketClimb/1.0",
+                },
+                body: JSON.stringify({ query, variables }),
+                timeout: 35,
+            });
+
+            if (res && res.statusCode >= 200 && res.statusCode < 300) {
+                const payload = typeof res.json === "object" && res.json !== null
+                    ? res.json
+                    : JSON.parse(res.raw || "{}");
+                if (payload.errors && !payload.data) {
+                    throw new Error(payload.errors[0]?.message || "GraphQL error");
+                }
+                return payload.data;
+            }
+            throw new Error(`OpenBeta HTTP error ${res ? res.statusCode : "unknown"}`);
+        } catch (err) {
+            lastErr = err;
+            if (attempt <= retries && typeof sleep === "function") {
+                sleep(500 * attempt);
+            }
+        }
+    }
+    throw lastErr;
+}
+
+/**
+ * Synchronize/update climbs from OpenBeta API (https://api.openbeta.io/)
+ * with the fewest requests possible.
+ *
+ * Strategies:
+ * 1. "areas" mode (default):
+ *    Batches leaf area UUIDs present in our database into GraphQL aliased queries.
+ *    By bundling 50-60 areas per single HTTP request, each request fetches ~500-1000 climbs,
+ *    updating all 22,000+ climbs in only ~35-42 requests total!
+ * 2. "catalog" mode:
+ *    Paginates OpenBeta catalog using areas(filter: { leaf_status: { isLeaf: true } }, limit: $batchSize, offset: $offset).
+ *    Fetches up to 100-200 leaf crags and ~1,000-1,600 climbs per request.
+ * 3. Specific Area:
+ *    If areaUuid is provided, fetches only that area and its climbs in 1 single request.
+ *
+ * @param {object} options
+ * @param {string} [options.mode="areas"] - "areas" | "catalog"
+ * @param {number} [options.batchSize=50] - Areas per GraphQL request
+ * @param {number} [options.limit=0] - Max areas to process (0 = all)
+ * @param {number} [options.offset=0] - Starting offset
+ * @param {boolean} [options.all=false] - Whether to continue looping through all batches
+ * @param {boolean} [options.dryRun=false] - Simulate without writing to DB
+ * @param {string|string[]} [options.areaUuid] - Specific area UUID(s) to sync
+ * @param {number} [options.timeoutSeconds=50] - Safety timeout in seconds (0 = disabled)
+ * @returns {object} Sync result statistics
+ */
+function updateClimbsFromOpenBeta(options = {}) {
+    const startTime = Date.now();
+    const mode = (options.mode === "catalog") ? "catalog" : "areas";
+    const dryRun = Boolean(options.dryRun);
+    const timeoutSec = (typeof options.timeoutSeconds === "number") ? options.timeoutSeconds : 50;
+    const maxDurationMs = timeoutSec > 0 ? timeoutSec * 1000 : 0;
+    const runAll = Boolean(options.all) || (!options.limit && !options.offset);
+
+    let totalTargetCount = 0;
+    let areasProcessed = 0;
+    let climbsUpdated = 0;
+    let pitchesUpdated = 0;
+    let requestsMade = 0;
+    let failedBatches = [];
+    let timedOut = false;
+
+    if (mode === "areas") {
+        let targetUuids = [];
+        if (options.areaUuid) {
+            targetUuids = Array.isArray(options.areaUuid)
+                ? options.areaUuid
+                : String(options.areaUuid).split(",").map((s) => s.trim()).filter(Boolean);
+        } else {
+            // Find all active leaf areas from PocketBase (enforcing isDeleted = false)
+            const leafAreas = $app.findRecordsByFilter(
+                POCKET_AREAS,
+                "isDeleted = false && isLeaf = true",
+                "name",
+                0,
+                0
+            ) || [];
+            targetUuids = leafAreas.map((r) => r.getString("openbetaUuid")).filter(Boolean);
+        }
+
+        totalTargetCount = targetUuids.length;
+        const batchSize = Math.min(Math.max(parseInt(options.batchSize, 10) || 50, 1), 100);
+        let currentOffset = Math.max(parseInt(options.offset, 10) || 0, 0);
+        const maxLimit = (parseInt(options.limit, 10) > 0)
+            ? parseInt(options.limit, 10)
+            : (runAll ? totalTargetCount : batchSize);
+        const limitOffset = Math.min(currentOffset + maxLimit, totalTargetCount);
+
+        // Preload area records map for fast resolution
+        const areaIdMap = {};
+        try {
+            const allDbAreas = $app.findRecordsByFilter(
+                POCKET_AREAS,
+                "isDeleted = false",
+                "",
+                0,
+                0
+            ) || [];
+            for (let i = 0; i < allDbAreas.length; i++) {
+                const u = allDbAreas[i].getString("openbetaUuid");
+                if (u) {
+                    areaIdMap[u] = allDbAreas[i].id;
+                }
+            }
+        } catch (_) {}
+
+        while (currentOffset < limitOffset) {
+            if (maxDurationMs > 0 && (Date.now() - startTime) >= maxDurationMs) {
+                timedOut = true;
+                break;
+            }
+
+            const chunkUuids = targetUuids.slice(currentOffset, Math.min(currentOffset + batchSize, limitOffset));
+            if (chunkUuids.length === 0) break;
+
+            const aliases = chunkUuids.map((u, i) =>
+                `a${i}: area(uuid: "${u}") { uuid area_name shortCode totalClimbs climbs { ...ClimbFields } }`
+            ).join("\n");
+
+            const gqlQuery = `${OPENBETA_CLIMB_FIELDS_FRAGMENT}\nquery {\n${aliases}\n}`;
+
+            try {
+                requestsMade++;
+                const payloadData = sendOpenBetaGraphQL(gqlQuery) || {};
+
+                const batchAreas = [];
+                for (let i = 0; i < chunkUuids.length; i++) {
+                    const areaData = payloadData[`a${i}`];
+                    if (areaData && areaData.uuid) {
+                        batchAreas.push(areaData);
+                    }
+                }
+
+                let batchClimbsCount = 0;
+                let batchPitchesCount = 0;
+
+                for (let a = 0; a < batchAreas.length; a++) {
+                    const cList = Array.isArray(batchAreas[a].climbs) ? batchAreas[a].climbs : [];
+                    batchClimbsCount += cList.length;
+                    for (let c = 0; c < cList.length; c++) {
+                        const pList = Array.isArray(cList[c].pitches) ? cList[c].pitches : [];
+                        batchPitchesCount += pList.length;
+                    }
+                }
+
+                if (!dryRun) {
+                    $app.runInTransaction((txApp) => {
+                        for (let a = 0; a < batchAreas.length; a++) {
+                            const areaData = batchAreas[a];
+                            const areaUuid = areaData.uuid;
+                            const areaRecordId = areaIdMap[areaUuid] || "";
+                            const climbs = Array.isArray(areaData.climbs) ? areaData.climbs : [];
+                            for (let c = 0; c < climbs.length; c++) {
+                                upsertOpenBetaClimbRecord(climbs[c], areaUuid, areaRecordId, areaData, txApp);
+                            }
+                        }
+                    });
+                }
+
+                areasProcessed += chunkUuids.length;
+                climbsUpdated += batchClimbsCount;
+                pitchesUpdated += batchPitchesCount;
+                currentOffset += chunkUuids.length;
+
+                $app.logger().info(
+                    `[OpenBeta Climbs Sync] Batch complete: offset ${currentOffset}/${totalTargetCount}, ${batchClimbsCount} climbs processed (Requests: ${requestsMade})`
+                );
+            } catch (batchErr) {
+                $app.logger().error("[OpenBeta Climbs Sync] Batch failed", "offset", currentOffset, "error", batchErr);
+                failedBatches.push({ offset: currentOffset, count: chunkUuids.length, error: batchErr?.message || String(batchErr) });
+                currentOffset += chunkUuids.length;
+                areasProcessed += chunkUuids.length;
+            }
+        }
+
+        const durationSeconds = Math.round((Date.now() - startTime) / 100) / 10;
+        const hasMore = currentOffset < totalTargetCount;
+        const resultStats = {
+            status: timedOut ? "partial_success" : (failedBatches.length > 0 && areasProcessed === 0 ? "error" : "success"),
+            message: timedOut
+                ? `Processed ${areasProcessed} areas (${climbsUpdated} climbs updated across ${requestsMade} requests) before safety timeout. Call again with offset=${currentOffset} to continue.`
+                : `Successfully updated climbs from OpenBeta with ${requestsMade} requests (${climbsUpdated} climbs updated across ${areasProcessed} areas).`,
+            mode: "areas",
+            dryRun,
+            totalAreas: totalTargetCount,
+            areasProcessed,
+            climbsUpdated,
+            pitchesUpdated,
+            requestsMade,
+            offset: parseInt(options.offset, 10) || 0,
+            nextOffset: hasMore ? currentOffset : null,
+            hasMore,
+            failedBatches,
+            durationSeconds,
+            timestamp: new Date().toISOString(),
+        };
+
+        lastClimbsSyncStats = resultStats;
+        return resultStats;
+    } else {
+        // "catalog" mode: paginate OpenBeta catalog
+        const batchSize = Math.min(Math.max(parseInt(options.batchSize, 10) || 100, 1), 200);
+        let currentOffset = Math.max(parseInt(options.offset, 10) || 0, 0);
+        const maxLimit = parseInt(options.limit, 10) > 0 ? parseInt(options.limit, 10) : (runAll ? 100000 : batchSize);
+        let remainingToProcess = maxLimit;
+
+        const catalogQuery = `${OPENBETA_CLIMB_FIELDS_FRAGMENT}
+query GetCatalogLeafAreas($limit: Int!, $offset: Int!) {
+    areas(filter: { leaf_status: { isLeaf: true } }, limit: $limit, offset: $offset) {
+        id
+        uuid
+        area_name
+        shortCode
+        totalClimbs
+        density
+        pathTokens
+        ancestors
+        pathHash
+        gradeContext
+        content { description areaLocation }
+        metadata { isDestination leaf isBoulder lat lng bbox leftRightIndex mp_id area_id }
+        authorMetadata { createdAt createdBy createdByUser updatedAt updatedBy updatedByUser }
+        climbs {
+            ...ClimbFields
+        }
+    }
+}`;
+
+        let hasMore = true;
+        while (hasMore && remainingToProcess > 0) {
+            if (maxDurationMs > 0 && (Date.now() - startTime) >= maxDurationMs) {
+                timedOut = true;
+                break;
+            }
+
+            const currentBatchLimit = Math.min(batchSize, remainingToProcess);
+            try {
+                requestsMade++;
+                const payloadData = sendOpenBetaGraphQL(catalogQuery, {
+                    limit: currentBatchLimit,
+                    offset: currentOffset,
+                });
+
+                const returnedAreas = Array.isArray(payloadData?.areas) ? payloadData.areas : [];
+                if (returnedAreas.length === 0) {
+                    hasMore = false;
+                    break;
+                }
+
+                let batchClimbsCount = 0;
+                let batchPitchesCount = 0;
+
+                for (let a = 0; a < returnedAreas.length; a++) {
+                    const cList = Array.isArray(returnedAreas[a].climbs) ? returnedAreas[a].climbs : [];
+                    batchClimbsCount += cList.length;
+                    for (let c = 0; c < cList.length; c++) {
+                        const pList = Array.isArray(cList[c].pitches) ? cList[c].pitches : [];
+                        batchPitchesCount += pList.length;
+                    }
+                }
+
+                if (!dryRun) {
+                    $app.runInTransaction((txApp) => {
+                        for (let a = 0; a < returnedAreas.length; a++) {
+                            const areaObj = returnedAreas[a];
+                            const areaRecord = upsertOpenBetaAreaRecord(areaObj, null, null, txApp);
+                            const areaRecordId = areaRecord?.id || "";
+                            const climbs = Array.isArray(areaObj.climbs) ? areaObj.climbs : [];
+                            for (let c = 0; c < climbs.length; c++) {
+                                upsertOpenBetaClimbRecord(climbs[c], areaObj.uuid, areaRecordId, areaObj, txApp);
+                            }
+                        }
+                    });
+                }
+
+                areasProcessed += returnedAreas.length;
+                climbsUpdated += batchClimbsCount;
+                pitchesUpdated += batchPitchesCount;
+                currentOffset += returnedAreas.length;
+                remainingToProcess -= returnedAreas.length;
+
+                $app.logger().info(
+                    `[OpenBeta Catalog Climbs Sync] Batch complete: offset ${currentOffset}, ${batchClimbsCount} climbs processed (Requests: ${requestsMade})`
+                );
+
+                if (returnedAreas.length < currentBatchLimit) {
+                    hasMore = false;
+                }
+            } catch (catErr) {
+                $app.logger().error("[OpenBeta Catalog Climbs Sync] Batch failed", "offset", currentOffset, "error", catErr);
+                failedBatches.push({ offset: currentOffset, error: catErr?.message || String(catErr) });
+                hasMore = false;
+            }
+        }
+
+        const durationSeconds = Math.round((Date.now() - startTime) / 100) / 10;
+        const resultStats = {
+            status: timedOut ? "partial_success" : (failedBatches.length > 0 && areasProcessed === 0 ? "error" : "success"),
+            message: timedOut
+                ? `Processed ${areasProcessed} areas (${climbsUpdated} climbs updated across ${requestsMade} requests) before safety timeout. Call again with offset=${currentOffset} to continue.`
+                : `Successfully updated climbs from OpenBeta catalog with ${requestsMade} requests (${climbsUpdated} climbs updated across ${areasProcessed} areas).`,
+            mode: "catalog",
+            dryRun,
+            areasProcessed,
+            climbsUpdated,
+            pitchesUpdated,
+            requestsMade,
+            offset: parseInt(options.offset, 10) || 0,
+            nextOffset: hasMore ? currentOffset : null,
+            hasMore,
+            failedBatches,
+            durationSeconds,
+            timestamp: new Date().toISOString(),
+        };
+
+        lastClimbsSyncStats = resultStats;
+        return resultStats;
+    }
+}
+
 
 
 
