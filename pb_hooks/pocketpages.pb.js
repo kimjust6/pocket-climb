@@ -21,8 +21,8 @@ routerUse((e) => {
             return e.next();
         }
 
-        // 2. Pass through PocketBase API routes and clippy webhooks
-        if (cleanPath.startsWith("api/") || cleanPath.startsWith("clippy/")) {
+        // 2. Pass through PocketBase API routes, clippy webhooks, and MCP endpoint
+        if (cleanPath.startsWith("api/") || cleanPath.startsWith("clippy/") || cleanPath === "mcp" || cleanPath.startsWith("mcp/")) {
             return e.next();
         }
 
