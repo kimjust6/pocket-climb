@@ -1,0 +1,397 @@
+<script server>
+    const { prepareClimbDetailViewData } = require(`${__hooks}/pages/utils/common.js`);
+    const reqObj = typeof request !== 'undefined' ? request : null;
+    const climbView = prepareClimbDetailViewData(params, reqObj, data);
+
+    if (!climbView) {
+        api.status = 404;
+    } else if (climbView.shouldRedirect && climbView.canonicalPath) {
+        if (typeof response !== 'undefined' && typeof response.redirect === 'function') {
+            response.redirect(climbView.canonicalPath, 301);
+        } else {
+            redirect(climbView.canonicalPath);
+        }
+    }
+</script>
+
+<% if (!climbView) { %>
+    <%- include('pagenotfound.ejs') %>
+<% } else if (!climbView.shouldRedirect) { %>
+    <%
+        const climb = climbView.climb;
+        const climbMedia = climb.media || [];
+        const breadcrumbLd = {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: (climbView.breadcrumbs || []).map((bc, idx) => ({
+                '@type': 'ListItem',
+                position: idx + 1,
+                name: bc.name,
+                item: bc.url
+            }))
+        };
+    %>
+    <script type="application/ld+json"><%- JSON.stringify(breadcrumbLd).replace(/</g, '\\u003c') %></script>
+
+    <div class="bg-base-100 pt-24 pb-20 min-h-[calc(100vh-12.54rem)] not-prose">
+        <div class="max-w-6xl mx-auto px-4 sm:px-6">
+
+            <!-- Breadcrumbs -->
+            <nav aria-label="Breadcrumb" class="mb-6">
+                <ol class="flex flex-wrap items-center gap-1.5 text-sm text-base-content/70 pl-0 list-none my-0">
+                    <li class="my-0">
+                        <a href="/" class="hover:text-accent font-medium transition-colors no-underline">
+                            🏠 Home
+                        </a>
+                    </li>
+                    <% (climbView.breadcrumbs || []).forEach(bc => { %>
+                        <li aria-hidden="true" class="text-base-content/40 my-0">›</li>
+                        <li class="my-0">
+                            <% if (bc.isCurrent) { %>
+                                <span class="text-secondary font-semibold"><%= bc.name %></span>
+                            <% } else { %>
+                                <a href="<%= bc.url %>" class="hover:text-accent transition-colors no-underline">
+                                    <%= bc.name %>
+                                </a>
+                            <% } %>
+                        </li>
+                    <% }); %>
+                </ol>
+            </nav>
+
+            <!-- Quick Back Navigation -->
+            <div class="flex flex-wrap items-center gap-2 mb-6">
+                <% if (climbView.parentArea) { %>
+                    <a href="<%= climbView.parentArea.url %>" class="btn btn-sm btn-outline border-secondary/40 text-secondary hover:bg-secondary hover:text-secondary-content hover:border-secondary rounded-lg no-underline">
+                        ← Back to <%= climbView.parentArea.name %>
+                    </a>
+                <% } %>
+                <a href="/#locations" class="btn btn-sm btn-ghost text-base-content/70 hover:text-accent rounded-lg no-underline">
+                    All Locations
+                </a>
+            </div>
+
+            <!-- Climb Header & Core Metadata -->
+            <section id="climb-<%= climb.id %>" class="card dark:bg-base-300/80 bg-base-300/60 border border-secondary/20 rounded-2xl p-6 sm:p-8 shadow-lg mb-8">
+                <div class="flex flex-wrap items-start justify-between gap-4">
+                    <div class="min-w-0">
+                        <h1 class="text-3xl sm:text-4xl font-extrabold text-secondary mt-0 mb-2 break-words">
+                            <%= climb.name %>
+                        </h1>
+                        <% if (climbView.parentArea) { %>
+                            <p class="text-sm text-base-content/70 my-0">
+                                📍 Located in
+                                <a href="<%= climbView.parentArea.url %>" class="text-accent hover:underline font-medium no-underline">
+                                    <%= climbView.parentArea.name %>
+                                </a>
+                            </p>
+                        <% } %>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2 shrink-0">
+                        <% if (climb.primaryGrade) { %>
+                            <span class="badge badge-accent badge-lg font-mono font-bold px-3 py-3 text-sm">
+                                <%= climb.primaryGrade %>
+                            </span>
+                        <% } %>
+                        <% if (climb.safety && climb.safety !== 'UNSPECIFIED') { %>
+                            <% const isHighRiskSafety = climb.safety === 'R' || climb.safety === 'X'; %>
+                            <span class="badge <%= isHighRiskSafety ? 'badge-error' : 'badge-warning' %> badge-outline font-mono font-bold">
+                                Safety: <%= climb.safety %>
+                            </span>
+                        <% } %>
+                        <% (climb.disciplines || []).forEach(disc => { %>
+                            <span class="badge badge-outline border-secondary/40 text-secondary font-medium uppercase tracking-wide text-xs">
+                                <%= disc %>
+                            </span>
+                        <% }); %>
+                    </div>
+                </div>
+
+                <% if (climb.allGrades && climb.allGrades.length > 0) { %>
+                    <div class="flex flex-wrap items-center gap-2 mt-4">
+                        <% climb.allGrades.forEach(g => { %>
+                            <span class="badge badge-sm badge-ghost font-mono border border-base-content/15">
+                                <%= g.system %>: <%= g.value %>
+                            </span>
+                        <% }); %>
+                    </div>
+                <% } %>
+
+                <!-- Structured Metadata Grid -->
+                <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 mt-6 pt-5 border-t border-base-content/10 text-xs">
+                    <% if (climb.fa) { %>
+                        <div class="bg-base-100/60 border border-base-content/10 rounded-xl px-3.5 py-2.5">
+                            <div class="text-[11px] uppercase tracking-wider text-base-content/55 font-semibold">First Ascent</div>
+                            <div class="text-sm font-medium text-base-content mt-0.5 break-words"><%= climb.fa %></div>
+                        </div>
+                    <% } %>
+
+                    <% if (climb.length > 0) { %>
+                        <div class="bg-base-100/60 border border-base-content/10 rounded-xl px-3.5 py-2.5">
+                            <div class="text-[11px] uppercase tracking-wider text-base-content/55 font-semibold">Length</div>
+                            <div class="text-sm font-mono font-semibold text-base-content mt-0.5"><%= climb.length %>m</div>
+                        </div>
+                    <% } %>
+
+                    <% if (climb.pitchesCount > 0) { %>
+                        <div class="bg-base-100/60 border border-base-content/10 rounded-xl px-3.5 py-2.5">
+                            <div class="text-[11px] uppercase tracking-wider text-base-content/55 font-semibold">Pitches</div>
+                            <div class="text-sm font-mono font-semibold text-base-content mt-0.5"><%= climb.pitchesCount %></div>
+                        </div>
+                    <% } %>
+
+                    <% if (climb.boltsCount > 0) { %>
+                        <div class="bg-base-100/60 border border-base-content/10 rounded-xl px-3.5 py-2.5">
+                            <div class="text-[11px] uppercase tracking-wider text-base-content/55 font-semibold">Bolts</div>
+                            <div class="text-sm font-mono font-semibold text-base-content mt-0.5"><%= climb.boltsCount %></div>
+                        </div>
+                    <% } %>
+
+                    <% if (climb.hasCoords) { %>
+                        <div class="bg-base-100/60 border border-base-content/10 rounded-xl px-3.5 py-2.5">
+                            <div class="text-[11px] uppercase tracking-wider text-base-content/55 font-semibold">Coordinates</div>
+                            <a
+                                href="https://www.openstreetmap.org/?mlat=<%= climb.lat %>&mlon=<%= climb.lng %>#map=16/<%= climb.lat %>/<%= climb.lng %>"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="text-xs font-mono text-accent hover:underline mt-0.5 inline-block no-underline"
+                            >
+                                <%= climb.lat.toFixed(5) %>, <%= climb.lng.toFixed(5) %> ↗
+                            </a>
+                        </div>
+                    <% } %>
+
+                    <% if (climb.createdByUser) { %>
+                        <div class="bg-base-100/60 border border-base-content/10 rounded-xl px-3.5 py-2.5">
+                            <div class="text-[11px] uppercase tracking-wider text-base-content/55 font-semibold">Contributor</div>
+                            <div class="text-sm font-mono text-base-content mt-0.5 break-words"><%= climb.createdByUser %></div>
+                        </div>
+                    <% } %>
+                </div>
+
+                <!-- Route Beta / Markdown Details -->
+                <% if (climb.descriptionHtml || climb.locationHtml || climb.protectionHtml) { %>
+                    <div class="mt-6 pt-5 border-t border-base-content/10 space-y-5">
+                        <% if (climb.descriptionHtml) { %>
+                            <div>
+                                <h2 class="text-base font-bold text-secondary mt-0 mb-1.5">Description</h2>
+                                <div class="markdown-content text-sm text-base-content/85 leading-relaxed">
+                                    <%- climb.descriptionHtml %>
+                                </div>
+                            </div>
+                        <% } %>
+
+                        <% if (climb.locationHtml) { %>
+                            <div>
+                                <h2 class="text-base font-bold text-secondary mt-0 mb-1.5">Location &amp; Approach</h2>
+                                <div class="markdown-content text-sm text-base-content/85 leading-relaxed">
+                                    <%- climb.locationHtml %>
+                                </div>
+                            </div>
+                        <% } %>
+
+                        <% if (climb.protectionHtml) { %>
+                            <div>
+                                <h2 class="text-base font-bold text-secondary mt-0 mb-1.5">Protection</h2>
+                                <div class="markdown-content text-sm text-base-content/85 leading-relaxed">
+                                    <%- climb.protectionHtml %>
+                                </div>
+                            </div>
+                        <% } %>
+                    </div>
+                <% } %>
+            </section>
+
+            <!-- Photos Section -->
+            <section id="photos" class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-2xl p-6 shadow-sm mb-8 scroll-mt-24">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+                    <div class="flex items-center gap-2.5">
+                        <h2 class="text-xl font-bold text-secondary my-0">Photos</h2>
+                        <span
+                            data-climb-photo-count="<%= climb.id %>"
+                            data-count-plain="true"
+                            class="badge badge-ghost badge-sm font-mono<%= climbMedia.length > 0 ? '' : ' hidden' %>"
+                        >
+                            <%= climbMedia.length %> <%= climbMedia.length === 1 ? 'photo' : 'photos' %>
+                        </span>
+                    </div>
+
+                    <% if (climbView.isAuthenticated) { %>
+                        <button
+                            type="button"
+                            data-upload-climb-id="<%= climb.id %>"
+                            data-upload-climb-name="<%= climb.name %>"
+                            class="btn btn-sm btn-outline border-accent/40 text-accent hover:bg-accent hover:text-accent-content hover:border-accent gap-1.5 rounded-lg font-medium"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z" />
+                                <circle cx="12" cy="13" r="3" />
+                            </svg>
+                            Add Photo
+                        </button>
+                    <% } else { %>
+                        <a
+                            href="/login?redirect=<%= encodeURIComponent(climbView.canonicalPath + '#photos') %>"
+                            class="btn btn-sm btn-ghost text-accent hover:underline no-underline"
+                        >
+                            Sign in to add photo
+                        </a>
+                    <% } %>
+                </div>
+
+                <div data-climb-gallery-wrap="<%= climb.id %>" class="<%= climbMedia.length > 0 ? '' : 'hidden' %>">
+                    <div data-climb-gallery="<%= climb.id %>" data-max-thumbnails="0" class="not-prose grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        <% climbMedia.forEach(photo => { %>
+                            <button
+                                type="button"
+                                data-lightbox-open="<%= climb.id %>"
+                                data-media-id="<%= photo.id %>"
+                                class="relative aspect-[4/3] w-full rounded-lg overflow-hidden border border-base-content/15 bg-base-100/70 group cursor-pointer focus:outline-none focus:ring-2 focus:ring-accent"
+                                aria-label="View photo of <%= climb.name %>"
+                            >
+                                <img
+                                    src="<%= photo.url %>"
+                                    alt="Photo of <%= climb.name %>"
+                                    loading="lazy"
+                                    decoding="async"
+                                    referrerpolicy="no-referrer"
+                                    class="w-full h-full object-cover my-0 group-hover:scale-105 transition-transform duration-200"
+                                />
+                            </button>
+                        <% }); %>
+                    </div>
+                </div>
+
+                <div data-climb-gallery-empty="<%= climb.id %>" class="rounded-xl border border-dashed border-base-content/20 bg-base-100/40 p-6 text-center<%= climbMedia.length === 0 ? '' : ' hidden' %>">
+                    <p class="text-sm text-base-content/70 my-0">
+                        No photos have been added to <strong><%= climb.name %></strong> yet.
+                    </p>
+                </div>
+            </section>
+
+            <!-- Pitches Section -->
+            <% if (climbView.pitches && climbView.pitches.length > 0) { %>
+                <section id="pitches" class="mb-8">
+                    <h2 class="text-2xl font-bold text-secondary mt-0 mb-4">
+                        Pitches (<%= climbView.pitches.length %>)
+                    </h2>
+                    <div class="space-y-3">
+                        <% climbView.pitches.forEach(pitch => { %>
+                            <div class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-4 sm:p-5 shadow-sm">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <span class="font-bold text-secondary">Pitch <%= pitch.pitchNumber %></span>
+                                        <% if (pitch.primaryGrade) { %>
+                                            <span class="badge badge-accent badge-sm font-mono font-bold"><%= pitch.primaryGrade %></span>
+                                        <% } %>
+                                        <% (pitch.disciplines || []).forEach(disc => { %>
+                                            <span class="badge badge-xs badge-outline border-secondary/40 text-secondary uppercase"><%= disc %></span>
+                                        <% }); %>
+                                    </div>
+                                    <div class="flex flex-wrap items-center gap-3 text-xs font-mono text-base-content/70">
+                                        <% if (pitch.length > 0) { %>
+                                            <span><%= pitch.length %>m</span>
+                                        <% } %>
+                                        <% if (pitch.boltsCount > 0) { %>
+                                            <span><%= pitch.boltsCount %> <%= pitch.boltsCount === 1 ? 'bolt' : 'bolts' %></span>
+                                        <% } %>
+                                    </div>
+                                </div>
+                                <% if (pitch.descriptionHtml) { %>
+                                    <div class="markdown-content text-sm text-base-content/80 mt-2 leading-relaxed">
+                                        <%- pitch.descriptionHtml %>
+                                    </div>
+                                <% } %>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <!-- Recent Ticks Section -->
+            <% if (climbView.ticks && climbView.ticks.length > 0) { %>
+                <section id="ticks" class="mb-8">
+                    <h2 class="text-2xl font-bold text-secondary mt-0 mb-4">
+                        Recent Ticks (<%= climbView.ticks.length %>)
+                    </h2>
+                    <div class="space-y-2.5">
+                        <% climbView.ticks.forEach(tick => { %>
+                            <div class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-4 shadow-sm">
+                                <div class="flex flex-wrap items-center justify-between gap-2">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <% if (tick.name) { %>
+                                            <span class="font-semibold text-sm text-secondary"><%= tick.name %></span>
+                                        <% } %>
+                                        <% if (tick.style) { %>
+                                            <span class="badge badge-sm badge-outline border-accent/40 text-accent font-mono"><%= tick.style %></span>
+                                        <% } %>
+                                        <% if (tick.attemptType) { %>
+                                            <span class="badge badge-sm badge-ghost font-mono"><%= tick.attemptType %></span>
+                                        <% } %>
+                                        <% if (tick.grade) { %>
+                                            <span class="badge badge-sm badge-accent font-mono font-bold"><%= tick.grade %></span>
+                                        <% } %>
+                                    </div>
+                                    <% if (tick.dateFormatted) { %>
+                                        <span class="text-xs font-mono text-base-content/60"><%= tick.dateFormatted %></span>
+                                    <% } %>
+                                </div>
+                                <% if (tick.notes) { %>
+                                    <p class="text-sm text-base-content/80 mt-2 mb-0 whitespace-pre-line"><%= tick.notes %></p>
+                                <% } %>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <!-- More Climbs in Same Area -->
+            <% if (climbView.siblingClimbs && climbView.siblingClimbs.length > 0) { %>
+                <section id="more-climbs" class="mb-8">
+                    <div class="flex flex-wrap items-center justify-between gap-2 mb-4">
+                        <h2 class="text-2xl font-bold text-secondary my-0">
+                            More Climbs<% if (climbView.parentArea) { %> in <%= climbView.parentArea.name %><% } %>
+                        </h2>
+                        <% if (climbView.parentArea) { %>
+                            <a href="<%= climbView.parentArea.url %>" class="text-sm text-accent hover:underline font-medium no-underline">
+                                View all in <%= climbView.parentArea.name %> →
+                            </a>
+                        <% } %>
+                    </div>
+                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <% climbView.siblingClimbs.forEach(sib => { %>
+                            <a href="<%= sib.url %>"
+                                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 border border-secondary/20 hover:border-accent/50 rounded-xl p-4 no-underline transition-all">
+                                <div class="flex items-start justify-between gap-2">
+                                    <span class="font-semibold text-sm text-secondary"><%= sib.name %></span>
+                                    <% if (sib.primaryGrade) { %>
+                                        <span class="badge badge-accent badge-sm font-mono font-bold shrink-0">
+                                            <%= sib.primaryGrade %>
+                                        </span>
+                                    <% } %>
+                                </div>
+                                <% if (sib.disciplines && sib.disciplines.length > 0) { %>
+                                    <div class="flex flex-wrap gap-1 mt-2">
+                                        <% sib.disciplines.forEach(disc => { %>
+                                            <span class="badge badge-xs badge-ghost uppercase font-medium"><%= disc %></span>
+                                        <% }); %>
+                                    </div>
+                                <% } %>
+                            </a>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <%- include('climb-media-modals.ejs', {
+                climbs: [climb],
+                canonicalPath: climbView.canonicalPath,
+                isAuthenticated: climbView.isAuthenticated,
+                isImgurConfigured: climbView.isImgurConfigured,
+                imgurClientId: climbView.imgurClientId
+            }) %>
+
+        </div>
+    </div>
+<% } %>

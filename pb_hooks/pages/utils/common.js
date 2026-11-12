@@ -1255,19 +1255,15 @@ function resolveMarkdownHref(rawHref) {
         try {
             const climbRec = getClimbByUuid(climbUuid);
             if (climbRec) {
-                const parentKey = climbRec.getString('area') || climbRec.getString('areaUuid');
-                const areaRec = parentKey ? getAreaByUuid(parentKey) : null;
-                if (areaRec) {
-                    return {
-                        href: `${buildAreaUrl(areaRec.id, areaRec.getString('name'))}#climb-${climbRec.id}`,
-                        isExternal: false
-                    };
-                }
+                return {
+                    href: buildClimbUrl(climbRec.id, climbRec.getString('name')),
+                    isExternal: false
+                };
             }
         } catch (_) {}
         return {
-            href: `https://openbeta.io/climbs/${climbUuid}`,
-            isExternal: true
+            href: `/climb/${climbUuid}`,
+            isExternal: false
         };
     }
 
@@ -1897,6 +1893,17 @@ function buildAreaUrl(id, name) {
 }
 
 /**
+ * Build canonical Climb URL (/climb/:slug/:id)
+ * @param {string} id
+ * @param {string} name
+ * @returns {string}
+ */
+function buildClimbUrl(id, name) {
+    const slug = slugifyTitle(String(name || "climb")) || "climb";
+    return `/climb/${encodeURIComponent(slug)}/${encodeURIComponent(String(id || ""))}`;
+}
+
+/**
  * Load site metadata, hero cards, social links, and footer info from `admin_settings` in PocketBase
  * @returns {object}
  */
@@ -2192,38 +2199,19 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
 
         const climbsResult = getClimbs(1, 24, rawQuery);
         matchingClimbs = (climbsResult.items || []).map((cl) => {
-            const grade =
-                cl.getString("gradeYds") ||
-                cl.getString("gradeVscale") ||
-                cl.getString("gradeFrench") ||
-                cl.getString("gradeFont") ||
-                "";
-            let clPathTokens = [];
-            try {
-                const rawPt = cl.getString("pathTokens") || cl.get("pathTokens");
-                clPathTokens = Array.isArray(rawPt)
-                    ? rawPt
-                    : typeof rawPt === "string" && rawPt.startsWith("[")
-                        ? JSON.parse(rawPt)
-                        : [];
-            } catch (_) {}
-            let disciplines = [];
-            try {
-                const rawDisc = cl.getString("disciplines") || cl.get("disciplines");
-                disciplines = Array.isArray(rawDisc)
-                    ? rawDisc
-                    : typeof rawDisc === "string" && rawDisc.startsWith("[")
-                        ? JSON.parse(rawDisc)
-                        : [];
-            } catch (_) {}
+            const name = cl.getString("name");
+            const { primaryGrade } = buildGradeDetails(cl);
+            const clPathTokens = parseJsonArrayField(cl, "pathTokens");
+            const disciplines = parseJsonArrayField(cl, "disciplines");
             const areaId = cl.getString("area") || cl.getString("areaUuid") || "";
             const areaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "Area";
             return {
                 id: cl.id,
-                name: cl.getString("name"),
-                grade,
+                name,
+                grade: primaryGrade,
                 disciplines,
                 pathSummary: clPathTokens.join(" › "),
+                url: buildClimbUrl(cl.id, name),
                 areaUrl: areaId ? buildAreaUrl(areaId, areaName) : "/"
             };
         });
@@ -2264,6 +2252,191 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
 }
 
 /**
+ * Safely parse a JSON array field from a PocketBase Record
+ * @param {Record} record
+ * @param {string} fieldName
+ * @returns {Array<any>}
+ */
+function parseJsonArrayField(record, fieldName) {
+    if (!record || !fieldName) return [];
+    try {
+        const raw = record.getString(fieldName) || record.get(fieldName);
+        if (Array.isArray(raw)) return raw;
+        if (typeof raw === "string") {
+            const trimmed = raw.trim();
+            if (trimmed.startsWith("[")) {
+                const parsed = JSON.parse(trimmed);
+                return Array.isArray(parsed) ? parsed : [];
+            }
+            if (trimmed) return [trimmed];
+        }
+    } catch (_) {}
+    return [];
+}
+
+/**
+ * Extract normalized grade strings and ordered grade pills from a climb or pitch record
+ * @param {Record} record
+ * @returns {object}
+ */
+function buildGradeDetails(record) {
+    const getStr = (f) => (record && typeof record.getString === "function" ? record.getString(f) || "" : "");
+    const gradeYds = getStr("gradeYds");
+    const gradeVscale = getStr("gradeVscale");
+    const gradeFrench = getStr("gradeFrench");
+    const gradeFont = getStr("gradeFont");
+    const gradeEwbank = getStr("gradeEwbank");
+    const gradeBrazilianCrux = getStr("gradeBrazilianCrux");
+    const gradeUiaa = getStr("gradeUiaa");
+    const gradeWi = getStr("gradeWi");
+
+    const primaryGrade =
+        gradeYds ||
+        gradeVscale ||
+        gradeFrench ||
+        gradeFont ||
+        gradeEwbank ||
+        gradeUiaa ||
+        gradeWi ||
+        gradeBrazilianCrux ||
+        "";
+
+    const allGrades = [];
+    if (gradeYds) allGrades.push({ system: "YDS", value: gradeYds });
+    if (gradeVscale) allGrades.push({ system: "V", value: gradeVscale });
+    if (gradeFrench && gradeFrench !== gradeYds) allGrades.push({ system: "FR", value: gradeFrench });
+    if (gradeFont && gradeFont !== gradeVscale) allGrades.push({ system: "Font", value: gradeFont });
+    if (gradeEwbank) allGrades.push({ system: "Ewbank", value: gradeEwbank });
+    if (gradeUiaa) allGrades.push({ system: "UIAA", value: gradeUiaa });
+    if (gradeWi) allGrades.push({ system: "WI", value: gradeWi });
+    if (gradeBrazilianCrux) allGrades.push({ system: "BR", value: gradeBrazilianCrux });
+
+    return {
+        primaryGrade,
+        gradeYds,
+        gradeVscale,
+        gradeFrench,
+        gradeFont,
+        gradeEwbank,
+        gradeBrazilianCrux,
+        gradeUiaa,
+        gradeWi,
+        allGrades
+    };
+}
+
+/**
+ * Build area breadcrumb links from pathTokens and ancestor UUIDs
+ * @param {Array<string>} pathTokens
+ * @param {Array<string>} ancestors
+ * @param {boolean} markLastCurrent
+ * @returns {Array<object>}
+ */
+function buildAreaBreadcrumbs(pathTokens = [], ancestors = [], markLastCurrent = true) {
+    const { getAreasMapByUuids } = require(`${__hooks}/pages/utils/pocket.js`);
+    const ancestorRecordsByUuid = getAreasMapByUuids(ancestors);
+    const breadcrumbs = [];
+    const crumbLen = Math.min(pathTokens.length, ancestors.length);
+    for (let i = 0; i < crumbLen; i++) {
+        const ancUuid = ancestors[i];
+        const ancRec = ancestorRecordsByUuid[ancUuid];
+        const ancId = ancRec ? ancRec.id : ancUuid;
+        breadcrumbs.push({
+            name: pathTokens[i],
+            id: ancId,
+            uuid: ancUuid,
+            url: buildAreaUrl(ancId, pathTokens[i]),
+            isCurrent: markLastCurrent && i === crumbLen - 1
+        });
+    }
+    return breadcrumbs;
+}
+
+/**
+ * Format and group climb_media records by climb ID, sorted newest-first
+ * @param {Array<Record>} rawMediaRecords
+ * @param {string} currentUserId
+ * @returns {Object<string, Array<object>>}
+ */
+function groupFormattedClimbMedia(rawMediaRecords = [], currentUserId = '') {
+    const mediaByClimbId = {};
+    for (let mIdx = 0; mIdx < rawMediaRecords.length; mIdx++) {
+        const mRec = rawMediaRecords[mIdx];
+        const mClimbId = mRec.getString('climb');
+        if (!mClimbId) continue;
+        const formatted = formatClimbMediaItem(mRec, currentUserId);
+        if (!formatted) continue;
+        if (!mediaByClimbId[mClimbId]) {
+            mediaByClimbId[mClimbId] = [];
+        }
+        mediaByClimbId[mClimbId].push(formatted);
+    }
+    Object.keys(mediaByClimbId).forEach((cid) => {
+        mediaByClimbId[cid].sort((a, b) => (b.sortTimestamp || 0) - (a.sortTimestamp || 0));
+    });
+    return mediaByClimbId;
+}
+
+/**
+ * Format a climb PocketBase record into a full view object shared across Area and Climb views
+ * @param {Record} cl
+ * @param {Array<object>} mediaList
+ * @returns {object}
+ */
+function formatClimbSummary(cl, mediaList = []) {
+    const name = cl.getString("name") || "Unnamed Climb";
+    const gradeInfo = buildGradeDetails(cl);
+    const disciplines = parseJsonArrayField(cl, "disciplines");
+    const clPathTokens = parseJsonArrayField(cl, "pathTokens");
+
+    const clAreaId = cl.getString("area") || cl.getString("areaUuid") || "";
+    const clSubAreaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "";
+
+    const safety = cl.getString("safety") || "";
+    const clGeo = cl.getGeoPoint("coordinates");
+    const clLat = clGeo?.lat || 0;
+    const clLng = clGeo?.lon || 0;
+    const pitchesCount = cl.getInt("pitchesCount") || 1;
+
+    const clDesc = cl.getString("description") || "";
+    const clLoc = cl.getString("location") || "";
+    const clProt = cl.getString("protection") || "";
+    const rawFa = cl.getString("fa") || "";
+
+    return {
+        id: cl.id,
+        uuid: cl.getString("openbetaUuid"),
+        name,
+        url: buildClimbUrl(cl.id, name),
+        fa: rawFa && rawFa.toLowerCase() !== "unknown" ? rawFa : "",
+        length: cl.getInt("length") || 0,
+        boltsCount: cl.getInt("boltsCount") || 0,
+        pitchesCount,
+        safety: safety !== "UNSPECIFIED" ? safety : "",
+        ...gradeInfo,
+        disciplines,
+        coordinates: {
+            lon: clLng,
+            lat: clLat
+        },
+        lat: clLat,
+        lng: clLng,
+        hasCoords: typeof clLat === "number" && typeof clLng === "number" && (clLat !== 0 || clLng !== 0),
+        description: clDesc,
+        descriptionHtml: renderMarkdown(clDesc),
+        location: clLoc,
+        locationHtml: renderMarkdown(clLoc, { inline: true }),
+        protection: clProt,
+        protectionHtml: renderMarkdown(clProt, { inline: true }),
+        createdByUser: cl.getString("createdByUser") || "",
+        updatedByUser: cl.getString("updatedByUser") || "",
+        subAreaName: clSubAreaName && clSubAreaName !== name ? clSubAreaName : "",
+        subAreaUrl: clAreaId && clSubAreaName ? buildAreaUrl(clAreaId, clSubAreaName) : "",
+        media: mediaList
+    };
+}
+
+/**
  * Prepare single Area page view model (/area/:slug/:id)
  * Also supports legacy /area/:uuid/:slug, /area/:uuid, and /area/:slug with 301 canonical redirect.
  * @param {object} params
@@ -2275,7 +2448,6 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const {
         getOrSyncAreaDetail,
         getAreasByNamePrefix,
-        getAreasMapByUuids,
         getClimbMediaByClimbIds
     } = require(`${__hooks}/pages/utils/pocket.js`);
 
@@ -2338,40 +2510,9 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const createdByUser = areaRecord.getString("createdByUser") || "";
     const updatedByUser = areaRecord.getString("updatedByUser") || "";
 
-    let pathTokens = [];
-    let ancestors = [];
-    try {
-        const rawTokens = areaRecord.getString("pathTokens") || areaRecord.get("pathTokens");
-        pathTokens = Array.isArray(rawTokens)
-            ? rawTokens
-            : typeof rawTokens === "string" && rawTokens.startsWith("[")
-                ? JSON.parse(rawTokens)
-                : [];
-    } catch (_) { }
-    try {
-        const rawAnc = areaRecord.getString("ancestors") || areaRecord.get("ancestors");
-        ancestors = Array.isArray(rawAnc)
-            ? rawAnc
-            : typeof rawAnc === "string" && rawAnc.startsWith("[")
-                ? JSON.parse(rawAnc)
-                : [];
-    } catch (_) { }
-
-    const ancestorRecordsByUuid = getAreasMapByUuids(ancestors);
-    const breadcrumbs = [];
-    const crumbLen = Math.min(pathTokens.length, ancestors.length);
-    for (let i = 0; i < crumbLen; i++) {
-        const ancUuid = ancestors[i];
-        const ancRec = ancestorRecordsByUuid[ancUuid];
-        const ancId = ancRec ? ancRec.id : ancUuid;
-        breadcrumbs.push({
-            name: pathTokens[i],
-            id: ancId,
-            uuid: ancUuid,
-            url: buildAreaUrl(ancId, pathTokens[i]),
-            isCurrent: ancUuid === uuid || ancId === areaRecord.id || i === crumbLen - 1
-        });
-    }
+    const pathTokens = parseJsonArrayField(areaRecord, "pathTokens");
+    const ancestors = parseJsonArrayField(areaRecord, "ancestors");
+    const breadcrumbs = buildAreaBreadcrumbs(pathTokens, ancestors, true);
     if (breadcrumbs.length === 0) {
         breadcrumbs.push({
             name,
@@ -2412,128 +2553,8 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const imgurClientId = getImgurClientId();
 
     const climbIds = (climbs || []).map((cl) => cl.id).filter(Boolean);
-    const rawMediaRecords = getClimbMediaByClimbIds(climbIds);
-    const mediaByClimbId = {};
-    for (let mIdx = 0; mIdx < rawMediaRecords.length; mIdx++) {
-        const mRec = rawMediaRecords[mIdx];
-        const mClimbId = mRec.getString('climb');
-        if (!mClimbId) continue;
-        const formatted = formatClimbMediaItem(mRec, currentUserId);
-        if (!formatted) continue;
-        if (!mediaByClimbId[mClimbId]) {
-            mediaByClimbId[mClimbId] = [];
-        }
-        mediaByClimbId[mClimbId].push(formatted);
-    }
-    Object.keys(mediaByClimbId).forEach((cid) => {
-        mediaByClimbId[cid].sort((a, b) => (b.sortTimestamp || 0) - (a.sortTimestamp || 0));
-    });
-
-    const formattedClimbs = (climbs || []).map((cl) => {
-        const gradeYds = cl.getString("gradeYds") || "";
-        const gradeVscale = cl.getString("gradeVscale") || "";
-        const gradeFrench = cl.getString("gradeFrench") || "";
-        const gradeFont = cl.getString("gradeFont") || "";
-        const gradeEwbank = cl.getString("gradeEwbank") || "";
-        const gradeBrazilianCrux = cl.getString("gradeBrazilianCrux") || "";
-        const gradeUiaa = cl.getString("gradeUiaa") || "";
-        const gradeWi = cl.getString("gradeWi") || "";
-        const primaryGrade =
-            gradeYds ||
-            gradeVscale ||
-            gradeFrench ||
-            gradeFont ||
-            gradeEwbank ||
-            gradeUiaa ||
-            gradeWi ||
-            gradeBrazilianCrux ||
-            "";
-
-        const allGrades = [];
-        if (gradeYds) allGrades.push({ system: "YDS", value: gradeYds });
-        if (gradeVscale) allGrades.push({ system: "V", value: gradeVscale });
-        if (gradeFrench && gradeFrench !== gradeYds) allGrades.push({ system: "FR", value: gradeFrench });
-        if (gradeFont && gradeFont !== gradeVscale) allGrades.push({ system: "Font", value: gradeFont });
-        if (gradeEwbank) allGrades.push({ system: "Ewbank", value: gradeEwbank });
-        if (gradeUiaa) allGrades.push({ system: "UIAA", value: gradeUiaa });
-        if (gradeWi) allGrades.push({ system: "WI", value: gradeWi });
-        if (gradeBrazilianCrux) allGrades.push({ system: "BR", value: gradeBrazilianCrux });
-
-        let disciplines = [];
-        try {
-            const rawDisc = cl.getString("disciplines") || cl.get("disciplines");
-            if (Array.isArray(rawDisc)) {
-                disciplines = rawDisc;
-            } else if (typeof rawDisc === "string" && rawDisc.startsWith("[")) {
-                disciplines = JSON.parse(rawDisc);
-            } else if (typeof rawDisc === "string" && rawDisc) {
-                disciplines = [rawDisc];
-            }
-        } catch (_) { }
-
-        let clPathTokens = [];
-        try {
-            const rawPt = cl.getString("pathTokens") || cl.get("pathTokens");
-            if (Array.isArray(rawPt)) {
-                clPathTokens = rawPt;
-            } else if (typeof rawPt === "string" && rawPt.startsWith("[")) {
-                clPathTokens = JSON.parse(rawPt);
-            }
-        } catch (_) { }
-
-        const clAreaId = cl.getString("area") || cl.getString("areaUuid") || "";
-        const clSubAreaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "";
-
-        const safety = cl.getString("safety") || "";
-        const clGeo = cl.getGeoPoint("coordinates");
-        const clLat = clGeo?.lat || 0;
-        const clLng = clGeo?.lon || 0;
-        const pitchesCount = cl.getInt("pitchesCount") || 1;
-
-        const clDesc = cl.getString("description") || "";
-        const clLoc = cl.getString("location") || "";
-        const clProt = cl.getString("protection") || "";
-
-        return {
-            id: cl.id,
-            uuid: cl.getString("openbetaUuid"),
-            name: cl.getString("name"),
-            fa: cl.getString("fa") || "",
-            length: cl.getInt("length") || 0,
-            boltsCount: cl.getInt("boltsCount") || 0,
-            pitchesCount,
-            safety: safety !== "UNSPECIFIED" ? safety : "",
-            primaryGrade,
-            gradeYds,
-            gradeVscale,
-            gradeFrench,
-            gradeFont,
-            gradeEwbank,
-            gradeBrazilianCrux,
-            gradeUiaa,
-            gradeWi,
-            allGrades,
-            disciplines,
-            coordinates: {
-                lon: clLng,
-                lat: clLat
-            },
-            lat: clLat,
-            lng: clLng,
-            hasCoords: typeof clLat === "number" && typeof clLng === "number" && (clLat !== 0 || clLng !== 0),
-            description: clDesc,
-            descriptionHtml: renderMarkdown(clDesc),
-            location: clLoc,
-            locationHtml: renderMarkdown(clLoc, { inline: true }),
-            protection: clProt,
-            protectionHtml: renderMarkdown(clProt, { inline: true }),
-            createdByUser: cl.getString("createdByUser") || "",
-            updatedByUser: cl.getString("updatedByUser") || "",
-            subAreaName: clSubAreaName && clSubAreaName !== name ? clSubAreaName : "",
-            subAreaUrl: clAreaId && clSubAreaName ? buildAreaUrl(clAreaId, clSubAreaName) : "",
-            media: mediaByClimbId[cl.id] || []
-        };
-    });
+    const mediaByClimbId = groupFormattedClimbMedia(getClimbMediaByClimbIds(climbIds), currentUserId);
+    const formattedClimbs = (climbs || []).map((cl) => formatClimbSummary(cl, mediaByClimbId[cl.id] || []));
 
     if (reqObj && !shouldRedirect) {
         trackGAEvent("select_content", {
@@ -2581,6 +2602,188 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         children: formattedChildren,
         climbs: formattedClimbs,
         isDescendantClimbs: Boolean(isDescendantClimbs),
+        url: canonicalPath,
+        canonicalPath,
+        shouldRedirect,
+        isAuthenticated: Boolean(currentUser),
+        isImgurConfigured: Boolean(imgurClientId),
+        imgurClientId: currentUser ? imgurClientId : ''
+    };
+}
+
+/**
+ * Prepare single Climb page view model (/climb/:slug/:id)
+ * Supports /climb/:slug/:id, /climb/:uuid/:slug, /climb/:uuid, /climb/:id, and /climb/:slug with 301 canonical redirect.
+ * @param {object} params
+ * @param {object} reqObj
+ * @param {object} data
+ * @returns {object|null}
+ */
+function prepareClimbDetailViewData(params = {}, reqObj = null, data = null) {
+    const {
+        getOrSyncClimbDetail,
+        getClimbsByNamePrefix
+    } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    const seg1 = typeof (params?.title ?? params?.uuid) === "string"
+        ? (params.title ?? params.uuid).trim()
+        : "";
+    const seg2 = typeof (params?.id ?? params?.slug) === "string"
+        ? (params.id ?? params.slug).trim()
+        : "";
+
+    if (!seg1 && !seg2) return null;
+
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    let lookupKey = "";
+    if (uuidRegex.test(seg1)) {
+        lookupKey = seg1;
+    } else if (seg2) {
+        lookupKey = seg2;
+    } else {
+        lookupKey = seg1;
+    }
+
+    let detail = getOrSyncClimbDetail(lookupKey);
+
+    if (!detail.climbRecord && seg1 && !seg2 && !uuidRegex.test(seg1)) {
+        const firstWord = seg1.split("-")[0].replace(/"/g, '\\"');
+        const candidates = getClimbsByNamePrefix(firstWord);
+        const targetSlug = seg1.toLowerCase();
+        const matched = candidates.find(
+            (c) => slugifyTitle(c.getString("name")) === targetSlug
+        );
+        if (matched) {
+            detail = getOrSyncClimbDetail(matched.id);
+        }
+    }
+
+    const { climbRecord, areaRecord, pitches, ticks, media, siblingClimbs } = detail;
+    if (!climbRecord) return null;
+
+    const currentUser = data?.user || getAuthenticatedUser(reqObj);
+    const currentUserId = currentUser?.id || '';
+    const imgurClientId = getImgurClientId();
+
+    const mediaByClimbId = groupFormattedClimbMedia(media, currentUserId);
+    const climb = formatClimbSummary(climbRecord, mediaByClimbId[climbRecord.id] || []);
+    const canonicalSlug = slugifyTitle(climb.name) || "climb";
+    const canonicalPath = climb.url;
+    const shouldRedirect = seg1 !== canonicalSlug || seg2 !== climbRecord.id;
+
+    const pathTokens = parseJsonArrayField(climbRecord, "pathTokens");
+    const ancestors = parseJsonArrayField(climbRecord, "ancestors");
+    const breadcrumbs = buildAreaBreadcrumbs(pathTokens, ancestors, false);
+
+    let parentArea = null;
+    if (areaRecord) {
+        const areaName = areaRecord.getString("name") || "Area";
+        parentArea = {
+            id: areaRecord.id,
+            name: areaName,
+            url: buildAreaUrl(areaRecord.id, areaName)
+        };
+    } else if (breadcrumbs.length > 0) {
+        const lastArea = breadcrumbs[breadcrumbs.length - 1];
+        parentArea = {
+            id: lastArea.id,
+            name: lastArea.name,
+            url: lastArea.url
+        };
+    }
+
+    breadcrumbs.push({
+        name: climb.name,
+        id: climb.id,
+        uuid: climb.uuid,
+        url: canonicalPath,
+        isCurrent: true
+    });
+
+    const formattedPitches = (pitches || []).map((p, idx) => {
+        const pitchDesc = p.getString("description") || "";
+        return {
+            id: p.id,
+            pitchNumber: p.getInt("pitchNumber") || idx + 1,
+            length: p.getInt("length") || 0,
+            boltsCount: p.getInt("boltsCount") || 0,
+            ...buildGradeDetails(p),
+            disciplines: parseJsonArrayField(p, "disciplines"),
+            description: pitchDesc,
+            descriptionHtml: renderMarkdown(pitchDesc)
+        };
+    });
+
+    const formattedTicks = (ticks || []).map((t) => {
+        const rawDate = t.getString("dateClimbed") || t.getString("created") || "";
+        return {
+            id: t.id,
+            name: t.getString("name") || "",
+            style: t.getString("style") || "",
+            attemptType: t.getString("attemptType") || "",
+            grade: t.getString("grade") || "",
+            dateFormatted: formatClimbMediaDate(rawDate),
+            notes: t.getString("notes") || ""
+        };
+    });
+
+    const formattedSiblings = (siblingClimbs || []).map((s) => {
+        const sName = s.getString("name") || "Unnamed Climb";
+        const { primaryGrade } = buildGradeDetails(s);
+        return {
+            id: s.id,
+            name: sName,
+            primaryGrade,
+            disciplines: parseJsonArrayField(s, "disciplines"),
+            url: buildClimbUrl(s.id, sName)
+        };
+    });
+
+    if (reqObj && !shouldRedirect) {
+        trackGAEvent("select_content", {
+            content_type: "climbing_route",
+            item_id: climb.id,
+            item_name: sanitizeSearchTerm(climb.name)
+        }, reqObj);
+    }
+
+    if (data?.metadata) {
+        const gradeSuffix = climb.primaryGrade ? ` (${climb.primaryGrade})` : "";
+        const areaSuffix = parentArea ? ` — ${parentArea.name}` : "";
+        const pageTitle = `${climb.name}${gradeSuffix}${areaSuffix} | Wiki Bloc`;
+        const descPieces = [];
+        if (climb.primaryGrade) descPieces.push(climb.primaryGrade);
+        if (climb.disciplines.length > 0) descPieces.push(climb.disciplines.join(", "));
+        if (parentArea) descPieces.push(`in ${parentArea.name}`);
+        const pageDesc = climb.description
+            ? extractPreviewText(climb.description).slice(0, 160)
+            : `${climb.name}${descPieces.length ? " — " + descPieces.join(" • ") : ""} climbing route details, photos, and beta on Wiki Bloc.`;
+        const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
+
+        setOrUpdateMeta(data.metadata, "title", pageTitle);
+        setOrUpdateMeta(data.metadata, "og:title", pageTitle);
+        setOrUpdateMeta(data.metadata, "twitter:title", pageTitle);
+        setOrUpdateMeta(data.metadata, "description", pageDesc);
+        setOrUpdateMeta(data.metadata, "og:description", pageDesc);
+        setOrUpdateMeta(data.metadata, "twitter:description", pageDesc);
+        setOrUpdateMeta(data.metadata, "url", canonicalUrl);
+        setOrUpdateMeta(data.metadata, "og:url", canonicalUrl);
+        setOrUpdateMeta(data.metadata, "twitter:url", canonicalUrl);
+
+        if (climb.media && climb.media.length > 0 && climb.media[0].url) {
+            setOrUpdateMeta(data.metadata, "og:image", climb.media[0].url);
+            setOrUpdateMeta(data.metadata, "og:image:secure_url", climb.media[0].url);
+            setOrUpdateMeta(data.metadata, "twitter:image", climb.media[0].url);
+        }
+    }
+
+    return {
+        climb,
+        parentArea,
+        breadcrumbs,
+        pitches: formattedPitches,
+        ticks: formattedTicks,
+        siblingClimbs: formattedSiblings,
         url: canonicalPath,
         canonicalPath,
         shouldRedirect,
@@ -2641,8 +2844,10 @@ module.exports = {
     prepareLoginPageViewData,
     formatNumberWithCommas,
     buildAreaUrl,
+    buildClimbUrl,
     prepareSiteAndHeroViewData,
     prepareHomepageDirectoryViewData,
-    prepareAreaDetailViewData
+    prepareAreaDetailViewData,
+    prepareClimbDetailViewData
 }
 
