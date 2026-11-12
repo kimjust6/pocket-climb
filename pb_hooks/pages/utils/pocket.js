@@ -33,12 +33,18 @@ module.exports = {
     getDatabaseCatalogStats,
     getHomepageSettingsMap,
     getClimbByUuid,
+    getClimbsByNamePrefix,
     getClimbs,
     getPitchesByClimbId,
     getTicksByClimbId,
     getOrganizations,
     getClimbMedia,
+    getClimbMediaByClimbIds,
+    getClimbMediaById,
+    createClimbMediaRecord,
+    softDeleteClimbMediaRecord,
     getOrSyncAreaDetail,
+    getOrSyncClimbDetail,
     upsertOpenBetaAreaRecord,
     upsertOpenBetaClimbRecord,
     upsertOpenBetaPitchRecord,
@@ -353,6 +359,27 @@ function getClimbByUuid(uuidOrId) {
 }
 
 /**
+ * Get climbs by name prefix (used for slug fallback lookup)
+ * @param {string} namePrefix
+ * @returns {Array<Record>}
+ */
+function getClimbsByNamePrefix(namePrefix) {
+    if (!namePrefix) return [];
+    try {
+        return $app.findRecordsByFilter(
+            POCKET_CLIMBS,
+            "name ~ {:namePrefix} && isDeleted = false",
+            "name",
+            50,
+            0,
+            { namePrefix }
+        ) || [];
+    } catch (_) {
+        return [];
+    }
+}
+
+/**
  * Get a paginated list of climbs
  * @param {number} page
  * @param {number} perPage
@@ -514,6 +541,143 @@ function getClimbMedia({ climbId = "", areaId = "" } = {}) {
         0,
         filterParams
     ) || [];
+}
+
+/**
+ * Get non-deleted media records for a list of climb IDs
+ * @param {Array<string>} climbIds
+ * @returns {Array<Record>}
+ */
+function getClimbMediaByClimbIds(climbIds = []) {
+    if (!Array.isArray(climbIds) || climbIds.length === 0) return [];
+    const uniqueIds = Array.from(new Set(climbIds.map((id) => String(id || "").trim()).filter(Boolean)));
+    if (uniqueIds.length === 0) return [];
+
+    const results = [];
+    const chunkSize = 40;
+    for (let start = 0; start < uniqueIds.length; start += chunkSize) {
+        const chunk = uniqueIds.slice(start, start + chunkSize);
+        const clauses = [];
+        const filterParams = {};
+        for (let i = 0; i < chunk.length; i++) {
+            const key = `cid${i}`;
+            clauses.push(`climb = {:${key}}`);
+            filterParams[key] = chunk[i];
+        }
+        try {
+            const batch = $app.findRecordsByFilter(
+                POCKET_CLIMB_MEDIA,
+                `isDeleted = false && (${clauses.join(" || ")})`,
+                "-created",
+                0,
+                0,
+                filterParams
+            ) || [];
+            for (let j = 0; j < batch.length; j++) {
+                results.push(batch[j]);
+            }
+        } catch (err) {
+            $app.logger().error("Failed to query climb media batch", "error", err);
+        }
+    }
+    return results;
+}
+
+/**
+ * Find a single non-deleted climb_media record by ID
+ * @param {string} mediaId
+ * @returns {Record|null}
+ */
+function getClimbMediaById(mediaId) {
+    if (!mediaId || typeof mediaId !== "string") return null;
+    try {
+        return $app.findFirstRecordByFilter(
+            POCKET_CLIMB_MEDIA,
+            "id = {:mediaId} && isDeleted = false",
+            { mediaId: mediaId.trim() }
+        );
+    } catch (_) {
+        return null;
+    }
+}
+
+/**
+ * Create a new climb_media record for an uploaded image URL (e.g., Imgur)
+ * @param {object} params
+ * @returns {Record|null}
+ */
+function createClimbMediaRecord({
+    climbRecord,
+    user = null,
+    mediaUrl = "",
+    width = 0,
+    height = 0,
+    format = "",
+    size = 0,
+    imgurId = ""
+} = {}) {
+    if (!climbRecord || !climbRecord.id || !mediaUrl) return null;
+
+    const collection = $app.findCollectionByNameOrId(POCKET_CLIMB_MEDIA);
+    if (!collection) return null;
+
+    const record = new Record(collection);
+    record.set("mediaUrl", String(mediaUrl).trim());
+    record.set("climb", climbRecord.id);
+
+    const areaId = typeof climbRecord.getString === "function" ? climbRecord.getString("area") : "";
+    if (areaId) {
+        record.set("area", areaId);
+    }
+
+    if (user && user.id) {
+        record.set("user", user.id);
+        const displayUsername = String(
+            user.displayName || user.name || user.username || (user.email ? user.email.split("@")[0] : "")
+        ).trim();
+        if (displayUsername) {
+            record.set("username", displayUsername);
+        }
+    }
+
+    const intWidth = parseInt(width, 10);
+    const intHeight = parseInt(height, 10);
+    const intSize = parseInt(size, 10);
+    if (Number.isFinite(intWidth) && intWidth > 0) record.set("width", intWidth);
+    if (Number.isFinite(intHeight) && intHeight > 0) record.set("height", intHeight);
+    if (Number.isFinite(intSize) && intSize > 0) record.set("size", intSize);
+
+    const cleanFormat = String(format || "").trim().toLowerCase().replace(/^image\//, "");
+    if (cleanFormat) {
+        record.set("format", cleanFormat.slice(0, 16));
+    }
+
+    record.set("uploadTime", new Date().toISOString());
+    record.set("entityTags", imgurId ? { source: "imgur", imgurId: String(imgurId) } : { source: "imgur" });
+    record.set("isDeleted", false);
+
+    $app.save(record);
+    return record;
+}
+
+/**
+ * Soft-delete a climb_media record after verifying ownership
+ * @param {string} mediaId
+ * @param {string} userId
+ * @returns {{ ok: boolean, status: number, error?: string }}
+ */
+function softDeleteClimbMediaRecord(mediaId, userId) {
+    const record = getClimbMediaById(mediaId);
+    if (!record) {
+        return { ok: false, status: 404, error: "Photo not found." };
+    }
+    const ownerId = record.getString("user");
+    if (!userId || !ownerId || ownerId !== userId) {
+        return { ok: false, status: 403, error: "You can only delete photos you uploaded." };
+    }
+    record.set("isDeleted", true);
+    $app.save(record);
+    return { ok: true, status: 200 };
 }
 
 /**
@@ -1345,6 +1509,121 @@ function getOrSyncAreaDetail(idOrUuid) {
         childAreas,
         climbs,
         isDescendantClimbs
+    };
+}
+
+/**
+ * Get single climb detail (plus parent area, pitches, ticks, media, and sibling climbs),
+ * syncing from OpenBeta on-demand if a UUID is requested and not yet in the local DB.
+ * @param {string} idOrUuid
+ * @returns {{ climbRecord: Record|null, areaRecord: Record|null, pitches: Array<Record>, ticks: Array<Record>, media: Array<Record>, siblingClimbs: Array<Record> }}
+ */
+function getOrSyncClimbDetail(idOrUuid) {
+    const emptyResult = {
+        climbRecord: null,
+        areaRecord: null,
+        pitches: [],
+        ticks: [],
+        media: [],
+        siblingClimbs: []
+    };
+    if (!idOrUuid || typeof idOrUuid !== "string") {
+        return emptyResult;
+    }
+
+    let climbRecord = getClimbByUuid(idOrUuid);
+    const isUuidFormat = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(idOrUuid);
+
+    if (!climbRecord && isUuidFormat && typeof $http !== "undefined") {
+        try {
+            const gqlQuery = `query GetClimb($uuid: ID!) {
+                climb(uuid: $uuid) {
+                    ${OPENBETA_CLIMB_FIELDS_FRAGMENT.replace(/fragment ClimbFields on Climb \{([\s\S]*)\}/, "$1")}
+                    media {
+                        id
+                        mediaUrl
+                        width
+                        height
+                        format
+                        size
+                        username
+                        user { userUuid username displayName }
+                        uploadTime
+                    }
+                    ticks {
+                        _id
+                        name
+                        userId
+                        style
+                        attemptType
+                        dateClimbed
+                        grade
+                        notes
+                        source
+                    }
+                }
+            }`;
+
+            const res = $http.send({
+                url: OPENBETA_API_ENDPOINT,
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    query: gqlQuery,
+                    variables: { uuid: idOrUuid }
+                }),
+                timeout: 15
+            });
+
+            if (res && res.statusCode >= 200 && res.statusCode < 300) {
+                const payload = typeof res.json === "object" && res.json !== null
+                    ? res.json
+                    : JSON.parse(res.raw || "{}");
+                const remoteClimb = payload?.data?.climb;
+                if (remoteClimb && remoteClimb.uuid) {
+                    const anc = Array.isArray(remoteClimb.ancestors) ? remoteClimb.ancestors : [];
+                    const parentAreaUuid = anc.length > 0 ? anc[anc.length - 1] : "";
+                    const parentAreaRec = parentAreaUuid ? getAreaByUuid(parentAreaUuid) : null;
+                    climbRecord = upsertOpenBetaClimbRecord(
+                        remoteClimb,
+                        parentAreaUuid,
+                        parentAreaRec?.id || "",
+                        null
+                    );
+                }
+            }
+        } catch (err) {
+            $app.logger().error("On-demand OpenBeta climb sync failed", "uuid", idOrUuid, "error", err);
+        }
+    }
+
+    if (!climbRecord) {
+        return emptyResult;
+    }
+
+    const areaKey = climbRecord.getString("area") || climbRecord.getString("areaUuid") || "";
+    const areaRecord = areaKey ? getAreaByUuid(areaKey) : null;
+    const pitches = getPitchesByClimbId(climbRecord.id);
+    const ticks = getTicksByClimbId(climbRecord.id);
+    const media = getClimbMediaByClimbIds([climbRecord.id]);
+
+    let siblingClimbs = [];
+    if (areaKey) {
+        try {
+            const sibResult = getClimbs(1, 13, "", { areaId: areaKey });
+            siblingClimbs = (sibResult?.items || [])
+                .filter((c) => c.id !== climbRecord.id)
+                .slice(0, 12);
+        } catch (_) {}
+    }
+
+    return {
+        climbRecord,
+        areaRecord,
+        pitches,
+        ticks,
+        media,
+        siblingClimbs
     };
 }
 

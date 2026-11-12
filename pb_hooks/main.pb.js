@@ -313,3 +313,184 @@ routerAdd("POST", "/api/openbeta/update-climbs", handleUpdateClimbsRequest);
 routerAdd("GET", "/api/openbeta/update-climbs", handleUpdateClimbsRequest);
 routerAdd("POST", "/api/climbs/update", handleUpdateClimbsRequest);
 routerAdd("GET", "/api/climbs/update", handleUpdateClimbsRequest);
+
+/**
+ * Create a climb_media record after uploading an image to Imgur (or via server Imgur fallback)
+ * POST /api/climbs/{climbId}/media
+ */
+routerAdd("POST", "/api/climbs/{climbId}/media", (e) => {
+    const {
+        getAuthenticatedUser,
+        getImgurClientId,
+        normalizeImgurUrl,
+        isValidImgurDirectUrl,
+        formatClimbMediaItem,
+        uploadBase64ToImgur,
+        trackGAEvent,
+    } = require(`${__hooks}/pages/utils/common.js`);
+    const {
+        getClimbByUuid,
+        createClimbMediaRecord,
+    } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    const authUser = getAuthenticatedUser(e);
+    if (!authUser) {
+        return e.json(401, {
+            ok: false,
+            message: "Please sign in to upload climb photos.",
+        });
+    }
+
+    const climbId = String(e.request?.pathValue?.("climbId") || "").trim();
+    const climbRecord = getClimbByUuid(climbId);
+    if (!climbRecord) {
+        return e.json(404, {
+            ok: false,
+            message: "Climb not found.",
+        });
+    }
+
+    let body = {};
+    try {
+        body = e.requestInfo()?.body || {};
+    } catch (_) {
+        return e.json(400, {
+            ok: false,
+            message: "Invalid request payload.",
+        });
+    }
+
+    let mediaPayload = null;
+    if (body && typeof body.mediaUrl === "string" && body.mediaUrl.trim()) {
+        const normalizedUrl = normalizeImgurUrl(body.mediaUrl);
+        if (!isValidImgurDirectUrl(normalizedUrl)) {
+            return e.json(400, {
+                ok: false,
+                message: "Only direct https://i.imgur.com/ image URLs are supported.",
+            });
+        }
+        mediaPayload = {
+            mediaUrl: normalizedUrl,
+            width: body.width,
+            height: body.height,
+            format: body.format,
+            size: body.size,
+            imgurId: body.imgurId,
+        };
+    } else if (body && typeof body.imageBase64 === "string" && body.imageBase64.trim()) {
+        const uploadResult = uploadBase64ToImgur(
+            body.imageBase64,
+            climbRecord.getString("name") || "",
+            getImgurClientId()
+        );
+        if (!uploadResult.ok || !uploadResult.data?.mediaUrl) {
+            return e.json(uploadResult.status || 502, {
+                ok: false,
+                message: uploadResult.error || "Failed to upload image to Imgur.",
+            });
+        }
+        if (!isValidImgurDirectUrl(uploadResult.data.mediaUrl)) {
+            return e.json(502, {
+                ok: false,
+                message: "Imgur returned an unexpected URL format.",
+            });
+        }
+        mediaPayload = uploadResult.data;
+    } else {
+        return e.json(400, {
+            ok: false,
+            message: "Please provide an Imgur image URL or image payload.",
+        });
+    }
+
+    try {
+        const saved = createClimbMediaRecord({
+            climbRecord,
+            user: authUser,
+            mediaUrl: mediaPayload.mediaUrl,
+            width: mediaPayload.width,
+            height: mediaPayload.height,
+            format: mediaPayload.format,
+            size: mediaPayload.size,
+            imgurId: mediaPayload.imgurId,
+        });
+
+        if (!saved) {
+            return e.json(500, {
+                ok: false,
+                message: "Failed to save climb media record.",
+            });
+        }
+
+        trackGAEvent("upload_climb_media", {
+            content_type: "climb_media",
+            item_id: climbRecord.id,
+        }, e.request);
+
+        return e.json(201, {
+            ok: true,
+            media: formatClimbMediaItem(saved, authUser.id),
+        });
+    } catch (err) {
+        $app.logger().error("Failed to save climb media", "climbId", climbRecord.id, "error", err);
+        return e.json(500, {
+            ok: false,
+            message: "Failed to save climb photo.",
+        });
+    }
+});
+
+/**
+ * Soft-delete a user's own uploaded climb_media record
+ * DELETE /api/climbs/{climbId}/media/{mediaId}
+ */
+function handleDeleteClimbMediaRequest(e) {
+    const { getAuthenticatedUser } = require(`${__hooks}/pages/utils/common.js`);
+    const {
+        getClimbByUuid,
+        getClimbMediaById,
+        softDeleteClimbMediaRecord,
+    } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    const authUser = getAuthenticatedUser(e);
+    if (!authUser) {
+        return e.json(401, {
+            ok: false,
+            message: "Please sign in to delete climb photos.",
+        });
+    }
+
+    const climbId = String(e.request?.pathValue?.("climbId") || "").trim();
+    const mediaId = String(e.request?.pathValue?.("mediaId") || "").trim();
+    const climbRecord = getClimbByUuid(climbId);
+    if (!climbRecord) {
+        return e.json(404, {
+            ok: false,
+            message: "Climb not found.",
+        });
+    }
+
+    const mediaRecord = getClimbMediaById(mediaId);
+    if (!mediaRecord || mediaRecord.getString("climb") !== climbRecord.id) {
+        return e.json(404, {
+            ok: false,
+            message: "Photo not found for this climb.",
+        });
+    }
+
+    try {
+        const result = softDeleteClimbMediaRecord(mediaId, authUser.id);
+        return e.json(result.status || 200, result.ok
+            ? { ok: true, id: mediaId }
+            : { ok: false, message: result.error || "Could not delete photo." });
+    } catch (err) {
+        $app.logger().error("Failed to delete climb media", "mediaId", mediaId, "error", err);
+        return e.json(500, {
+            ok: false,
+            message: "Failed to delete photo.",
+        });
+    }
+}
+
+routerAdd("DELETE", "/api/climbs/{climbId}/media/{mediaId}", handleDeleteClimbMediaRequest);
+routerAdd("POST", "/api/climbs/{climbId}/media/{mediaId}/delete", handleDeleteClimbMediaRequest);
