@@ -131,13 +131,34 @@
         <script type="application/ld+json">
 <%- JSON.stringify(jsonLd, null, 2) %>
         </script>
-        <!-- Speculation Rules API for instant navigation prefetching -->
+        <!-- Speculation Rules API for instant navigation prerendering & prefetching -->
         <script type="speculationrules">
         {
+            "prerender": [
+                {
+                    "where": {
+                        "and": [
+                            { "href_matches": "/*" },
+                            { "not": { "href_matches": "/api/*" } },
+                            { "not": { "href_matches": "/login*" } },
+                            { "not": { "href_matches": "/logout*" } },
+                            { "not": { "href_matches": "/signup*" } },
+                            { "not": { "selector_matches": "[rel~=nofollow]" } }
+                        ]
+                    },
+                    "eagerness": "moderate"
+                }
+            ],
             "prefetch": [
                 {
-                    "where": { "href_matches": "/*" },
-                    "eagerness": "moderate"
+                    "where": {
+                        "and": [
+                            { "href_matches": "/*" },
+                            { "not": { "href_matches": "/api/*" } },
+                            { "not": { "href_matches": "/logout*" } }
+                        ]
+                    },
+                    "eagerness": "conservative"
                 }
             ]
         }

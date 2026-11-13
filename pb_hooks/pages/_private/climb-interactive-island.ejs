@@ -1,0 +1,337 @@
+<%
+    if (!climb) return;
+    const safeClimbDataJson = JSON.stringify({
+        id: climb.id,
+        name: climb.name,
+        url: climb.url,
+        primaryGrade: climb.primaryGrade || '',
+        allGrades: climb.allGrades || [],
+        difficultyRank: climb.difficultyRank || 0,
+        difficultyTier: climb.difficultyTier || 'Intermediate',
+        gradeConversions: climb.gradeConversions || [],
+        length: climb.length || 0,
+        pitchesCount: climb.pitchesCount || 1,
+        boltsCount: climb.boltsCount || 0,
+        hasCoords: climb.hasCoords || false,
+        lat: climb.lat || 0,
+        lng: climb.lng || 0,
+        disciplines: climb.disciplines || []
+    }).replace(/</g, '\\u003c');
+%>
+<script id="climb-island-data" type="application/json"><%- safeClimbDataJson %></script>
+
+<div id="climb-interactive-island" class="not-prose mb-8">
+    <!-- Interactive Island Enhancement Bar (Vue Hydrated) -->
+    <div v-cloak v-if="isMounted" class="card dark:bg-base-300/70 bg-base-300/60 backdrop-blur border border-secondary/20 rounded-2xl p-4 shadow-md">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+            <!-- Left: Grade Conversion & Tier Badge Trigger -->
+            <div class="flex flex-wrap items-center gap-2">
+                <button
+                    type="button"
+                    @click="showGradeModal = true"
+                    class="btn btn-sm btn-outline border-accent/40 text-accent hover:bg-accent hover:text-accent-content gap-1.5 rounded-xl font-medium"
+                    title="Open International Grade Converter"
+                    aria-label="Open International Grade Converter"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16"/>
+                    </svg>
+                    <span>Grade Converter</span>
+                    <span class="badge badge-xs font-mono font-bold" :class="tierBadgeClass">
+                        {{ climb.difficultyTier }}
+                    </span>
+                </button>
+
+                <!-- Length Unit Switcher Pill -->
+                <button
+                    v-if="climb.length > 0"
+                    type="button"
+                    @click="toggleUnits"
+                    class="btn btn-sm btn-ghost border border-base-content/15 rounded-xl text-xs font-mono gap-1 hover:border-accent"
+                    title="Toggle Metric (m) / Imperial (ft)"
+                    aria-label="Toggle units"
+                >
+                    <span>📏</span>
+                    <span>{{ formattedLength }}</span>
+                    <span class="text-[10px] text-base-content/50 uppercase font-sans font-bold">({{ unitMode }})</span>
+                </button>
+            </div>
+
+            <!-- Right: Quick Actions (Bookmark, Share, Copy) -->
+            <div class="flex items-center gap-1.5 ml-auto">
+                <!-- Save / Bookmark Button -->
+                <button
+                    type="button"
+                    @click="toggleBookmark"
+                    class="btn btn-sm rounded-xl gap-1 transition-all"
+                    :class="isBookmarked ? 'btn-accent text-accent-content font-bold' : 'btn-ghost border border-base-content/15 text-base-content/80 hover:text-accent'"
+                    :title="isBookmarked ? 'Saved to your offline route list' : 'Bookmark route for offline reference'"
+                    :aria-label="isBookmarked ? 'Saved' : 'Bookmark route'"
+                >
+                    <span>{{ isBookmarked ? '★' : '☆' }}</span>
+                    <span class="hidden sm:inline">{{ isBookmarked ? 'Saved' : 'Save' }}</span>
+                </button>
+
+                <!-- Share Route Button (Web Share API) -->
+                <button
+                    type="button"
+                    @click="handleShare"
+                    class="btn btn-sm btn-ghost border border-base-content/15 text-base-content/80 hover:text-accent rounded-xl gap-1"
+                    title="Share this climb"
+                    aria-label="Share climb"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" x2="15.42" y1="13.51" y2="17.49"/><line x1="15.41" x2="8.59" y1="6.51" y2="10.49"/>
+                    </svg>
+                    <span class="hidden sm:inline">Share</span>
+                </button>
+
+                <!-- Copy Link Button with Animated Feedback -->
+                <button
+                    type="button"
+                    @click="handleCopyLink"
+                    class="btn btn-sm btn-ghost border border-base-content/15 rounded-xl gap-1 relative"
+                    :class="copied ? 'text-success font-bold' : 'text-base-content/80 hover:text-accent'"
+                    title="Copy route link"
+                    aria-label="Copy route link"
+                >
+                    <svg v-if="!copied" xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/>
+                    </svg>
+                    <span v-else class="text-xs">✓</span>
+                    <span class="text-xs">{{ copied ? 'Copied!' : 'Copy' }}</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- International Grade Conversion Modal (Vue Island Controlled) -->
+    <dialog v-cloak id="grade-converter-modal" class="modal" :class="{ 'modal-open': showGradeModal }">
+        <div class="modal-box max-w-lg bg-base-100 border border-secondary/20 rounded-2xl p-6 shadow-2xl">
+            <div class="flex items-start justify-between gap-3 mb-4">
+                <div>
+                    <h3 class="text-lg font-bold text-secondary my-0">Grade Converter</h3>
+                    <p class="text-xs text-base-content/60 font-mono mt-0.5 my-0">
+                        {{ climb.name }} • {{ climb.primaryGrade || 'Unrated' }}
+                    </p>
+                </div>
+                <button type="button" @click="showGradeModal = false" class="btn btn-sm btn-ghost btn-circle" aria-label="Close grade converter">✕</button>
+            </div>
+
+            <!-- Difficulty Meter Bar -->
+            <div class="mb-5 bg-base-200/60 p-3.5 rounded-xl border border-base-content/10">
+                <div class="flex items-center justify-between text-xs mb-1.5">
+                    <span class="font-semibold text-base-content/70">Difficulty Tier:</span>
+                    <span class="font-bold text-sm" :class="tierTextColor">{{ climb.difficultyTier }}</span>
+                </div>
+                <div class="w-full bg-base-300 rounded-full h-2.5 overflow-hidden">
+                    <div class="h-2.5 rounded-full transition-all duration-300" :style="{ width: difficultyPercent + '%', backgroundColor: tierColor }"></div>
+                </div>
+                <div class="flex justify-between text-[10px] text-base-content/40 font-mono mt-1">
+                    <span>Beginner</span>
+                    <span>Intermediate</span>
+                    <span>Advanced</span>
+                    <span>Expert</span>
+                    <span>Elite</span>
+                </div>
+            </div>
+
+            <!-- International Equivalents Table -->
+            <div class="overflow-x-auto rounded-xl border border-base-content/10">
+                <table class="table table-sm w-full">
+                    <thead>
+                        <tr class="bg-base-200/60 text-secondary text-xs uppercase font-semibold">
+                            <th>System</th>
+                            <th>Grade Equivalent</th>
+                            <th class="text-right">Region</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr
+                            v-for="c in climb.gradeConversions"
+                            :key="c.system"
+                            class="hover:bg-base-200/40 border-b border-base-content/5 transition-colors"
+                        >
+                            <td class="font-bold text-secondary text-xs">{{ c.system }}</td>
+                            <td>
+                                <span class="badge badge-accent badge-sm font-mono font-bold">
+                                    {{ c.value }}
+                                </span>
+                            </td>
+                            <td class="text-right text-[11px] text-base-content/60 font-mono">
+                                {{ c.region }}
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="modal-action mt-5">
+                <button type="button" @click="showGradeModal = false" class="btn btn-sm btn-primary rounded-xl">
+                    Close
+                </button>
+            </div>
+        </div>
+        <form method="dialog" class="modal-backdrop">
+            <button @click="showGradeModal = false">close</button>
+        </form>
+    </dialog>
+</div>
+
+<script>
+(function () {
+    if (typeof Vue === 'undefined') return;
+    const { createApp, ref, computed, onMounted } = Vue;
+
+    const rootEl = document.getElementById('climb-interactive-island');
+    if (!rootEl || rootEl.__vue_app__) return;
+
+    const dataEl = document.getElementById('climb-island-data');
+    let initialClimb = {};
+    if (dataEl) {
+        try { initialClimb = JSON.parse(dataEl.textContent || '{}'); } catch (_) {}
+    }
+
+    const app = createApp({
+        setup() {
+            const isMounted = ref(false);
+            const climb = ref(initialClimb);
+            const showGradeModal = ref(false);
+            const unitMode = ref('metric'); // 'metric' (m) or 'imperial' (ft)
+            const isBookmarked = ref(false);
+            const copied = ref(false);
+
+            onMounted(() => {
+                isMounted.value = true;
+                try {
+                    const savedUnits = localStorage.getItem('wiki_bloc_units');
+                    if (savedUnits === 'imperial' || savedUnits === 'metric') {
+                        unitMode.value = savedUnits;
+                    }
+                    const savedClimbs = JSON.parse(localStorage.getItem('wiki_bloc_saved_climbs') || '[]');
+                    isBookmarked.value = savedClimbs.some(c => c.id === climb.value.id);
+                } catch (_) {}
+            });
+
+            function toggleUnits() {
+                unitMode.value = unitMode.value === 'metric' ? 'imperial' : 'metric';
+                try {
+                    localStorage.setItem('wiki_bloc_units', unitMode.value);
+                } catch (_) {}
+            }
+
+            const formattedLength = computed(() => {
+                const len = climb.value.length || 0;
+                if (len <= 0) return '';
+                if (unitMode.value === 'imperial') {
+                    const feet = Math.round(len * 3.28084);
+                    return feet + ' ft';
+                }
+                return len + ' m';
+            });
+
+            const difficultyPercent = computed(() => {
+                const rank = climb.value.difficultyRank || 20;
+                return Math.min(100, Math.max(10, Math.round((rank / 80) * 100)));
+            });
+
+            const tierColor = computed(() => {
+                const t = climb.value.difficultyTier;
+                if (t === 'Beginner') return '#10b981'; // emerald
+                if (t === 'Intermediate') return '#3b82f6'; // blue
+                if (t === 'Advanced') return '#f59e0b'; // amber
+                if (t === 'Expert') return '#ef4444'; // red
+                if (t === 'Elite') return '#8b5cf6'; // purple
+                return '#6b7280';
+            });
+
+            const tierBadgeClass = computed(() => {
+                const t = climb.value.difficultyTier;
+                if (t === 'Beginner') return 'badge-success';
+                if (t === 'Intermediate') return 'badge-info';
+                if (t === 'Advanced') return 'badge-warning';
+                if (t === 'Expert') return 'badge-error';
+                if (t === 'Elite') return 'badge-secondary';
+                return 'badge-ghost';
+            });
+
+            const tierTextColor = computed(() => {
+                const t = climb.value.difficultyTier;
+                if (t === 'Beginner') return 'text-success';
+                if (t === 'Intermediate') return 'text-info';
+                if (t === 'Advanced') return 'text-warning';
+                if (t === 'Expert') return 'text-error';
+                if (t === 'Elite') return 'text-secondary';
+                return 'text-base-content';
+            });
+
+            function toggleBookmark() {
+                try {
+                    let list = JSON.parse(localStorage.getItem('wiki_bloc_saved_climbs') || '[]');
+                    const idx = list.findIndex(c => c.id === climb.value.id);
+                    if (idx >= 0) {
+                        list.splice(idx, 1);
+                        isBookmarked.value = false;
+                    } else {
+                        list.push({
+                            id: climb.value.id,
+                            name: climb.value.name,
+                            url: climb.value.url,
+                            primaryGrade: climb.value.primaryGrade,
+                            savedAt: new Date().toISOString()
+                        });
+                        isBookmarked.value = true;
+                    }
+                    localStorage.setItem('wiki_bloc_saved_climbs', JSON.stringify(list));
+                } catch (_) {
+                    isBookmarked.value = !isBookmarked.value;
+                }
+            }
+
+            function handleCopyLink() {
+                try {
+                    navigator.clipboard.writeText(window.location.href);
+                    copied.value = true;
+                    setTimeout(() => { copied.value = false; }, 2000);
+                } catch (_) {
+                    copied.value = true;
+                    setTimeout(() => { copied.value = false; }, 2000);
+                }
+            }
+
+            function handleShare() {
+                if (navigator.share) {
+                    navigator.share({
+                        title: climb.value.name + ' - Climbing Beta',
+                        text: 'Check out ' + climb.value.name + ' (' + (climb.value.primaryGrade || '') + ') on Wiki Bloc',
+                        url: window.location.href
+                    }).catch(() => {});
+                } else {
+                    handleCopyLink();
+                }
+            }
+
+            return {
+                isMounted,
+                climb,
+                showGradeModal,
+                unitMode,
+                toggleUnits,
+                formattedLength,
+                difficultyPercent,
+                tierColor,
+                tierBadgeClass,
+                tierTextColor,
+                isBookmarked,
+                copied,
+                toggleBookmark,
+                handleCopyLink,
+                handleShare
+            };
+        }
+    });
+
+    app.mount(rootEl);
+})();
+</script>
+

@@ -100,6 +100,19 @@
                                 Safety: <%= climb.safety %>
                             </span>
                         <% } %>
+                        <% if (climb.difficultyTier && climb.difficultyTier !== 'Unrated') { %>
+                            <%
+                                let tierBadgeClass = 'badge-ghost';
+                                if (climb.difficultyTier === 'Beginner') tierBadgeClass = 'badge-success';
+                                else if (climb.difficultyTier === 'Intermediate') tierBadgeClass = 'badge-info';
+                                else if (climb.difficultyTier === 'Advanced') tierBadgeClass = 'badge-warning';
+                                else if (climb.difficultyTier === 'Expert') tierBadgeClass = 'badge-error';
+                                else if (climb.difficultyTier === 'Elite') tierBadgeClass = 'badge-secondary';
+                            %>
+                            <span class="badge <%= tierBadgeClass %> badge-outline font-semibold text-xs">
+                                <%= climb.difficultyTier %>
+                            </span>
+                        <% } %>
                         <% (climb.disciplines || []).forEach(disc => { %>
                             <span class="badge badge-outline border-secondary/40 text-secondary font-medium uppercase tracking-wide text-xs">
                                 <%= disc %>
@@ -202,6 +215,9 @@
                     </div>
                 <% } %>
             </section>
+
+            <!-- Interactive Route Beta & Controls Island (Vue Islands Architecture) -->
+            <%- include('climb-interactive-island.ejs', { climb, climbView }) %>
 
             <!-- Photos Section -->
             <section id="photos" class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-2xl p-6 shadow-sm mb-8 scroll-mt-24">

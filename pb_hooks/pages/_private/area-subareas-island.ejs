@@ -1,0 +1,214 @@
+<%
+    const subareas = areaView.children || [];
+    if (!subareas || subareas.length === 0) return;
+    const safeSubareasJson = JSON.stringify(subareas).replace(/</g, '\\u003c');
+%>
+<script id="subareas-island-data" type="application/json"><%- safeSubareasJson %></script>
+
+<section id="subareas-island" class="mb-14 not-prose" aria-labelledby="heading-subareas">
+    <div class="flex flex-col sm:flex-row sm:items-end justify-between gap-3 mb-2">
+        <div>
+            <h2 id="heading-subareas" class="text-2xl font-bold text-base-content my-0">
+                Sub-Areas &amp; Crags (<%= subareas.length %>)
+            </h2>
+            <p class="text-xs text-base-content/60 my-0 mt-0.5">Explore sectors, walls, and crags in <%= areaView.name %></p>
+        </div>
+
+        <!-- Interactive Island Controls (Vue Enhanced) -->
+        <div v-cloak v-if="isMounted && allSubareas.length > 2" class="flex flex-wrap items-center gap-2">
+            <div class="relative w-full sm:w-60">
+                <input
+                    type="text"
+                    role="searchbox"
+                    v-model="searchQuery"
+                    placeholder="Filter sub-areas..."
+                    class="input input-bordered input-xs sm:input-sm w-full rounded-full bg-base-100/90 border-base-content/20 pl-3 pr-7 text-xs focus:outline-none focus:ring-2 focus:ring-accent"
+                    aria-label="Filter sub-areas by name"
+                />
+                <button
+                    v-if="searchQuery"
+                    @click="searchQuery = ''"
+                    type="button"
+                    class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 text-base-content/60 hover:text-base-content h-5 w-5 min-h-0 text-[10px]"
+                    aria-label="Clear sub-area filter"
+                >
+                    ✕
+                </button>
+            </div>
+
+            <div class="join">
+                <button
+                    type="button"
+                    @click="typeFilter = 'ALL'"
+                    class="btn btn-xs join-item"
+                    :class="typeFilter === 'ALL' ? 'btn-accent' : 'btn-ghost border-base-content/20'"
+                >
+                    All ({{ allSubareas.length }})
+                </button>
+                <button
+                    v-if="boulderCount > 0"
+                    type="button"
+                    @click="typeFilter = 'BOULDER'"
+                    class="btn btn-xs join-item"
+                    :class="typeFilter === 'BOULDER' ? 'btn-accent' : 'btn-ghost border-base-content/20'"
+                >
+                    Bouldering ({{ boulderCount }})
+                </button>
+                <button
+                    v-if="cragCount > 0"
+                    type="button"
+                    @click="typeFilter = 'ROPE'"
+                    class="btn btn-xs join-item"
+                    :class="typeFilter === 'ROPE' ? 'btn-accent' : 'btn-ghost border-base-content/20'"
+                >
+                    Crags ({{ cragCount }})
+                </button>
+            </div>
+        </div>
+    </div>
+    <hr class="mb-6 border-t-2 border-base-content" />
+
+    <!-- Active Filter Counter pill (Vue) -->
+    <div v-cloak v-if="isMounted && (searchQuery || typeFilter !== 'ALL')" class="flex items-center justify-between text-xs text-base-content/70 mb-4 bg-base-200/50 px-3 py-1.5 rounded-lg border border-base-content/10">
+        <span>Showing <strong>{{ filteredSubareas.length }}</strong> of {{ allSubareas.length }} sub-areas</span>
+        <button type="button" @click="resetFilters" class="btn btn-ghost btn-xs text-accent hover:underline p-0 h-auto min-h-0">
+            Reset filter
+        </button>
+    </div>
+
+    <!-- SSR Fallback (Rendered for Crawlers, SEO & No-JS) -->
+    <div v-if="!isMounted" class="ssr-subareas-fallback grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+        <% subareas.forEach(child => { %>
+            <a href="<%= child.url %>"
+                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 dark:hover:bg-base-300/90 border border-secondary/20 hover:border-accent/60 rounded-xl p-4 transition-all duration-200 no-underline group shadow-sm hover:shadow-md">
+                <div class="flex items-start justify-between gap-2">
+                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                        <%= child.name %>
+                    </span>
+                    <span class="badge badge-sm bg-base-100/80 border-accent/30 text-base-content font-mono shrink-0">
+                        <%= child.formattedClimbs %>
+                    </span>
+                </div>
+                <% if (child.isBoulder) { %>
+                    <div class="mt-2">
+                        <span class="badge badge-xs badge-outline text-base-content/70">Bouldering</span>
+                    </div>
+                <% } %>
+            </a>
+        <% }); %>
+    </div>
+
+    <!-- Vue-Enhanced Reactive Sub-Areas Grid -->
+    <div v-cloak v-if="isMounted" class="vue-subareas-grid">
+        <div v-if="filteredSubareas.length > 0" class="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            <a
+                v-for="child in filteredSubareas"
+                :key="child.id"
+                :href="child.url"
+                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 dark:hover:bg-base-300/90 border border-secondary/20 hover:border-accent/60 rounded-xl p-4 transition-all duration-200 no-underline group shadow-sm hover:shadow-md"
+            >
+                <div class="flex items-start justify-between gap-2">
+                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                        {{ child.name }}
+                    </span>
+                    <span class="badge badge-sm bg-base-100/80 border-accent/30 text-base-content font-mono shrink-0">
+                        {{ child.formattedClimbs }}
+                    </span>
+                </div>
+                <div class="flex flex-wrap gap-1 mt-2">
+                    <span v-if="child.isBoulder" class="badge badge-xs badge-outline text-base-content/70">
+                        Bouldering
+                    </span>
+                    <span v-if="child.shortCode" class="badge badge-xs badge-ghost font-mono">
+                        {{ child.shortCode }}
+                    </span>
+                </div>
+            </a>
+        </div>
+
+        <div v-else class="card dark:bg-base-300/70 bg-base-300/60 border border-secondary/20 rounded-xl p-6 text-center">
+            <p class="text-sm text-base-content/80 my-0">
+                No sub-areas match "<strong>{{ searchQuery }}</strong>".
+            </p>
+            <div class="mt-3">
+                <button type="button" @click="resetFilters" class="btn btn-sm btn-accent rounded-lg">
+                    Reset Filter
+                </button>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script>
+(function () {
+    if (typeof Vue === 'undefined') return;
+    const { createApp, ref, computed, onMounted } = Vue;
+
+    const rootEl = document.getElementById('subareas-island');
+    if (!rootEl || rootEl.__vue_app__) return;
+
+    const dataEl = document.getElementById('subareas-island-data');
+    let initialData = [];
+    if (dataEl) {
+        try {
+            initialData = JSON.parse(dataEl.textContent || '[]');
+        } catch (_) {}
+    }
+
+    const app = createApp({
+        setup() {
+            const isMounted = ref(false);
+            const allSubareas = ref(initialData);
+            const searchQuery = ref('');
+            const typeFilter = ref('ALL');
+
+            onMounted(() => {
+                isMounted.value = true;
+            });
+
+            const boulderCount = computed(() => {
+                return allSubareas.value.filter(s => Boolean(s.isBoulder)).length;
+            });
+
+            const cragCount = computed(() => {
+                return allSubareas.value.filter(s => !s.isBoulder).length;
+            });
+
+            const filteredSubareas = computed(() => {
+                const q = searchQuery.value.trim().toLowerCase();
+                const tf = typeFilter.value;
+
+                return allSubareas.value.filter(sub => {
+                    if (tf === 'BOULDER' && !sub.isBoulder) return false;
+                    if (tf === 'ROPE' && sub.isBoulder) return false;
+                    if (q) {
+                        const nameMatch = (sub.name || '').toLowerCase().includes(q);
+                        const codeMatch = (sub.shortCode || '').toLowerCase().includes(q);
+                        if (!nameMatch && !codeMatch) return false;
+                    }
+                    return true;
+                });
+            });
+
+            function resetFilters() {
+                searchQuery.value = '';
+                typeFilter.value = 'ALL';
+            }
+
+            return {
+                isMounted,
+                allSubareas,
+                searchQuery,
+                typeFilter,
+                boulderCount,
+                cragCount,
+                filteredSubareas,
+                resetFilters
+            };
+        }
+    });
+
+    app.mount(rootEl);
+})();
+</script>
+

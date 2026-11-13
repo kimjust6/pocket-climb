@@ -59,6 +59,9 @@
 
             function clearSearch() {
                 searchQuery.value = '';
+                if (!serverQuery) {
+                    return;
+                }
                 const queryObj = {};
                 if (countryFilter && countryFilter !== 'ALL') {
                     queryObj.country = countryFilter;

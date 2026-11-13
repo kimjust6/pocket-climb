@@ -227,6 +227,13 @@
         lightboxDeleteBtn.classList.toggle('hidden', !photo.canDelete);
         lightboxDeleteBtn.disabled = false;
         lightboxDeleteBtn.textContent = 'Delete Photo';
+
+        if (photo.id && window.history && window.history.replaceState) {
+            const targetHash = '#photo-' + encodeURIComponent(photo.id);
+            if (window.location.hash !== targetHash) {
+                window.history.replaceState({ lightbox: true, climbId: activeLightboxClimbId, mediaId: photo.id }, '', targetHash);
+            }
+        }
     }
 
     function openLightbox(climbId, mediaId) {
@@ -235,8 +242,54 @@
         activeLightboxClimbId = climbId;
         const foundIdx = entry.media.findIndex(function (m) { return m.id === mediaId; });
         activeLightboxIndex = foundIdx >= 0 ? foundIdx : 0;
+        const photo = entry.media[activeLightboxIndex];
+        if (photo && photo.id && window.history && window.history.pushState) {
+            window.history.pushState({ lightbox: true, climbId: climbId, mediaId: photo.id }, '', '#photo-' + encodeURIComponent(photo.id));
+        }
         updateLightboxView();
-        lightboxModal.showModal();
+        if (!lightboxModal.open) {
+            lightboxModal.showModal();
+        }
+    }
+
+    if (lightboxModal) {
+        lightboxModal.addEventListener('close', function () {
+            if (window.location.hash && window.location.hash.startsWith('#photo-') && window.history && window.history.replaceState) {
+                window.history.replaceState(null, '', window.location.pathname + window.location.search);
+            }
+        });
+    }
+
+    window.addEventListener('popstate', function () {
+        if (lightboxModal && lightboxModal.open && (!window.location.hash || !window.location.hash.startsWith('#photo-'))) {
+            lightboxModal.close();
+            return;
+        }
+        if (window.location.hash && window.location.hash.startsWith('#photo-')) {
+            const targetMediaId = decodeURIComponent(window.location.hash.slice(7));
+            for (const cid in climbState) {
+                const found = (climbState[cid]?.media || []).find(function (m) { return m.id === targetMediaId; });
+                if (found) {
+                    activeLightboxClimbId = cid;
+                    const fIdx = climbState[cid].media.findIndex(function (m) { return m.id === targetMediaId; });
+                    activeLightboxIndex = fIdx >= 0 ? fIdx : 0;
+                    updateLightboxView();
+                    if (lightboxModal && !lightboxModal.open) lightboxModal.showModal();
+                    break;
+                }
+            }
+        }
+    });
+
+    if (window.location.hash && window.location.hash.startsWith('#photo-')) {
+        const initialMediaId = decodeURIComponent(window.location.hash.slice(7));
+        for (const cid in climbState) {
+            const found = (climbState[cid]?.media || []).find(function (m) { return m.id === initialMediaId; });
+            if (found) {
+                openLightbox(cid, initialMediaId);
+                break;
+            }
+        }
     }
 
     if (lightboxCloseBtn && lightboxModal) {

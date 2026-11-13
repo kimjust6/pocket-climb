@@ -2274,6 +2274,147 @@ function parseJsonArrayField(record, fieldName) {
     return [];
 }
 
+const GRADE_CONVERSION_TABLE = [
+    { rank: 10, yds: '5.5',   fr: '4b',  font: '4',   v: 'VB',  uiaa: 'IV+',  ewbank: '13', brit: '4b', tier: 'Beginner' },
+    { rank: 14, yds: '5.6',   fr: '4c',  font: '4+',  v: 'V0-', uiaa: 'V-',   ewbank: '14', brit: '4b', tier: 'Beginner' },
+    { rank: 17, yds: '5.7',   fr: '5a',  font: '5',   v: 'V0',  uiaa: 'V',    ewbank: '15', brit: '4c', tier: 'Beginner' },
+    { rank: 20, yds: '5.8',   fr: '5b',  font: '5+',  v: 'V1',  uiaa: 'VI-',  ewbank: '16', brit: '4c', tier: 'Intermediate' },
+    { rank: 24, yds: '5.9',   fr: '5c',  font: '6A',  v: 'V2',  uiaa: 'VI',   ewbank: '17', brit: '5a', tier: 'Intermediate' },
+    { rank: 28, yds: '5.10a', fr: '6a',  font: '6A+', v: 'V3',  uiaa: 'VI+',  ewbank: '18', brit: '5a', tier: 'Intermediate' },
+    { rank: 30, yds: '5.10b', fr: '6a+', font: '6B',  v: 'V3',  uiaa: 'VII-', ewbank: '19', brit: '5b', tier: 'Intermediate' },
+    { rank: 32, yds: '5.10c', fr: '6b',  font: '6B+', v: 'V4',  uiaa: 'VII',  ewbank: '20', brit: '5b', tier: 'Intermediate' },
+    { rank: 34, yds: '5.10d', fr: '6b+', font: '6C',  v: 'V4',  uiaa: 'VII+', ewbank: '21', brit: '5c', tier: 'Intermediate' },
+    { rank: 38, yds: '5.11a', fr: '6c',  font: '6C+', v: 'V5',  uiaa: 'VIII-',ewbank: '22', brit: '5c', tier: 'Advanced' },
+    { rank: 40, yds: '5.11b', fr: '6c',  font: '7A',  v: 'V5',  uiaa: 'VIII', ewbank: '23', brit: '6a', tier: 'Advanced' },
+    { rank: 42, yds: '5.11c', fr: '6c+', font: '7A',  v: 'V6',  uiaa: 'VIII', ewbank: '24', brit: '6a', tier: 'Advanced' },
+    { rank: 44, yds: '5.11d', fr: '7a',  font: '7A+', v: 'V6',  uiaa: 'VIII+',ewbank: '25', brit: '6a', tier: 'Advanced' },
+    { rank: 48, yds: '5.12a', fr: '7a+', font: '7B',  v: 'V7',  uiaa: 'IX-',  ewbank: '26', brit: '6b', tier: 'Advanced' },
+    { rank: 50, yds: '5.12b', fr: '7b',  font: '7B+', v: 'V8',  uiaa: 'IX',   ewbank: '27', brit: '6b', tier: 'Advanced' },
+    { rank: 52, yds: '5.12c', fr: '7b+', font: '7C',  v: 'V8',  uiaa: 'IX+',  ewbank: '28', brit: '6c', tier: 'Advanced' },
+    { rank: 54, yds: '5.12d', fr: '7c',  font: '7C+', v: 'V9',  uiaa: 'IX+',  ewbank: '29', brit: '6c', tier: 'Advanced' },
+    { rank: 58, yds: '5.13a', fr: '7c+', font: '8A',  v: 'V10', uiaa: 'X-',   ewbank: '30', brit: '7a', tier: 'Expert' },
+    { rank: 60, yds: '5.13b', fr: '8a',  font: '8A+', v: 'V11', uiaa: 'X',    ewbank: '31', brit: '7a', tier: 'Expert' },
+    { rank: 62, yds: '5.13c', fr: '8a+', font: '8B',  v: 'V12', uiaa: 'X+',   ewbank: '32', brit: '7b', tier: 'Expert' },
+    { rank: 64, yds: '5.13d', fr: '8b',  font: '8B+', v: 'V13', uiaa: 'X+',   ewbank: '33', brit: '7b', tier: 'Expert' },
+    { rank: 68, yds: '5.14a', fr: '8b+', font: '8C',  v: 'V14', uiaa: 'XI-',  ewbank: '34', brit: '7b', tier: 'Elite' },
+    { rank: 70, yds: '5.14b', fr: '8c',  font: '8C+', v: 'V15', uiaa: 'XI',   ewbank: '35', brit: '7c', tier: 'Elite' },
+    { rank: 72, yds: '5.14c', fr: '8c+', font: '9A',  v: 'V16', uiaa: 'XI+',  ewbank: '36', brit: '7c', tier: 'Elite' },
+    { rank: 74, yds: '5.14d', fr: '9a',  font: '9A+', v: 'V17', uiaa: 'XI+',  ewbank: '37', brit: '7c', tier: 'Elite' },
+    { rank: 78, yds: '5.15a', fr: '9a+', font: '9B',  v: 'V17', uiaa: 'XII-', ewbank: '38', brit: '8a', tier: 'Elite' },
+    { rank: 82, yds: '5.15b', fr: '9b',  font: '9B+', v: 'V18', uiaa: 'XII',  ewbank: '39', brit: '8a', tier: 'Elite' }
+];
+
+/**
+ * Compute difficulty rank, difficulty tier, and cross-system equivalent grades
+ * @param {object} gradesObj
+ * @returns {object}
+ */
+function computeClimbGradeMetrics(gradesObj = {}) {
+    const raw = String(gradesObj.primaryGrade || gradesObj.gradeYds || gradesObj.gradeVscale || '').trim();
+    if (!raw) {
+        return {
+            difficultyRank: 0,
+            difficultyTier: 'Unrated',
+            isBouldering: false,
+            gradeConversions: []
+        };
+    }
+
+    const s = raw.toUpperCase();
+    let rank = 20;
+
+    const vMatch = s.match(/^V(\d+)/);
+    if (vMatch) {
+        const vNum = parseInt(vMatch[1], 10);
+        if (vNum === 0) rank = 17;
+        else if (vNum === 1) rank = 20;
+        else if (vNum === 2) rank = 24;
+        else if (vNum === 3) rank = 28;
+        else if (vNum === 4) rank = 32;
+        else if (vNum === 5) rank = 38;
+        else if (vNum === 6) rank = 42;
+        else if (vNum === 7) rank = 48;
+        else if (vNum === 8) rank = 50;
+        else if (vNum === 9) rank = 54;
+        else if (vNum === 10) rank = 58;
+        else if (vNum === 11) rank = 60;
+        else if (vNum === 12) rank = 62;
+        else rank = 64 + Math.min(18, (vNum - 13) * 2);
+    } else if (s === 'VB' || s === 'V-EASY') {
+        rank = 10;
+    } else {
+        const ydsMatch = s.match(/^5\.(\d+)([ABCD+-]?)/);
+        if (ydsMatch) {
+            const num = parseInt(ydsMatch[1], 10);
+            const mod = ydsMatch[2] ? ydsMatch[2].toLowerCase() : '';
+            if (num < 6) rank = 10;
+            else if (num === 6) rank = 14;
+            else if (num === 7) rank = 17;
+            else if (num === 8) rank = 20;
+            else if (num === 9) rank = 24;
+            else {
+                let sub = 2;
+                if (mod === 'a' || mod === '-') sub = 0;
+                else if (mod === 'b') sub = 2;
+                else if (mod === 'c' || mod === '+') sub = 4;
+                else if (mod === 'd') sub = 6;
+
+                if (num === 10) rank = 28 + sub;
+                else if (num === 11) rank = 38 + sub;
+                else if (num === 12) rank = 48 + sub;
+                else if (num === 13) rank = 58 + sub;
+                else if (num === 14) rank = 68 + sub;
+                else rank = 78 + sub;
+            }
+        } else {
+            const frMatch = s.match(/^([4-9])([ABC])(\+?)/);
+            if (frMatch) {
+                const base = parseInt(frMatch[1], 10);
+                const letter = frMatch[2].toLowerCase();
+                const plus = frMatch[3] === '+';
+                const sub = (letter === 'a' ? 0 : letter === 'b' ? 2 : 4) + (plus ? 1 : 0);
+                rank = 14 + (base - 4) * 8 + sub;
+            }
+        }
+    }
+
+    let tier = 'Beginner';
+    if (rank > 64) tier = 'Elite';
+    else if (rank > 54) tier = 'Expert';
+    else if (rank > 34) tier = 'Advanced';
+    else if (rank > 17) tier = 'Intermediate';
+
+    let bestRow = GRADE_CONVERSION_TABLE[0];
+    let minDiff = 999;
+    for (let i = 0; i < GRADE_CONVERSION_TABLE.length; i++) {
+        const row = GRADE_CONVERSION_TABLE[i];
+        const diff = Math.abs(row.rank - rank);
+        if (diff < minDiff) {
+            minDiff = diff;
+            bestRow = row;
+        }
+    }
+
+    const isBouldering = Boolean(gradesObj.gradeVscale || gradesObj.gradeFont || vMatch || s.startsWith('V'));
+
+    const gradeConversions = [
+        { system: 'YDS', value: gradesObj.gradeYds || bestRow.yds, region: 'USA' },
+        { system: 'French', value: gradesObj.gradeFrench || bestRow.fr, region: 'Europe / Sport' },
+        { system: 'Font', value: gradesObj.gradeFont || bestRow.font, region: 'Fontainebleau' },
+        { system: 'V-Scale', value: gradesObj.gradeVscale || bestRow.v, region: 'USA Bouldering' },
+        { system: 'UIAA', value: gradesObj.gradeUiaa || bestRow.uiaa, region: 'Central Europe' },
+        { system: 'Ewbank', value: gradesObj.gradeEwbank || bestRow.ewbank, region: 'Australia / NZ' },
+        { system: 'British', value: bestRow.brit, region: 'UK Tech' }
+    ];
+
+    return {
+        difficultyRank: rank,
+        difficultyTier: tier,
+        isBouldering,
+        gradeConversions
+    };
+}
+
 /**
  * Extract normalized grade strings and ordered grade pills from a climb or pitch record
  * @param {Record} record
@@ -2311,6 +2452,16 @@ function buildGradeDetails(record) {
     if (gradeWi) allGrades.push({ system: "WI", value: gradeWi });
     if (gradeBrazilianCrux) allGrades.push({ system: "BR", value: gradeBrazilianCrux });
 
+    const { difficultyRank, difficultyTier, isBouldering, gradeConversions } = computeClimbGradeMetrics({
+        primaryGrade,
+        gradeYds,
+        gradeVscale,
+        gradeFrench,
+        gradeFont,
+        gradeEwbank,
+        gradeUiaa
+    });
+
     return {
         primaryGrade,
         gradeYds,
@@ -2321,7 +2472,11 @@ function buildGradeDetails(record) {
         gradeBrazilianCrux,
         gradeUiaa,
         gradeWi,
-        allGrades
+        allGrades,
+        difficultyRank,
+        difficultyTier,
+        isBouldering,
+        gradeConversions
     };
 }
 
@@ -2848,6 +3003,7 @@ module.exports = {
     prepareSiteAndHeroViewData,
     prepareHomepageDirectoryViewData,
     prepareAreaDetailViewData,
-    prepareClimbDetailViewData
-}
+    prepareClimbDetailViewData,
+    computeClimbGradeMetrics
+};
 
