@@ -1,7 +1,7 @@
 {
     "description": "DO NOT DELETE THIS FILE. This file is used to keep track of which files have been synced in the most recent deployment. If you delete this file a resync will need to be done (which can take a while) - read more: https://github.com/SamKirkland/FTP-Deploy-Action",
     "version": "1.0.0",
-    "generatedTime": 1794516045083,
+    "generatedTime": 1794551560323,
     "data": [
         {
             "type": "folder",
@@ -18,8 +18,8 @@
         {
             "type": "file",
             "name": "pb_public/sw.js",
-            "size": 4005,
-            "hash": "e0ba591743de3d640313b7540ea197b116aeb6e584772e520bf104fcee4d59ba"
+            "size": 4030,
+            "hash": "d7abfa09f9689afac4c55ee35d140fe1e7e676d2e1049f2eae7c9579d4e65ed2"
         },
         {
             "type": "file",
@@ -114,6 +114,12 @@
             "name": "pb_public/js/vue-router.esm-browser.prod.js",
             "size": 27210,
             "hash": "48ba299e3aca7ae7e8b8274156ffa9e9e26dde459bcebb19c9d43eab2771401d"
+        },
+        {
+            "type": "file",
+            "name": "pb_public/js/app-router.js",
+            "size": 11789,
+            "hash": "cb5d1bc76eb958e52d8af794fa85f68b7b84d13dbe81334d8cc785719dbf1165"
         },
         {
             "type": "file",
@@ -378,8 +384,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/app.css",
-            "size": 114844,
-            "hash": "e04c8b2bb1e2539e6ed86f5c836b2b0ed8e8e29f8e271e0c3f83c758f2019305"
+            "size": 122138,
+            "hash": "a1ca3c19189682c6a37c677bde946b6b45043507b04f8f332b46dfd1d81523b2"
         },
         {
             "type": "folder",
@@ -426,8 +432,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/utils/common.js",
-            "size": 99723,
-            "hash": "e1c4abda7f1f797a50dd4b11b59ac47efd45e1c603829174260e92a1043add42"
+            "size": 108204,
+            "hash": "7f47cfdc9b1269558e0dd0b1e2bf2a7c413b5901f6ccc874171f0df8d78465f8"
         },
         {
             "type": "file",
@@ -498,8 +504,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/_private/openbeta-directory.ejs",
-            "size": 20308,
-            "hash": "a6499ff51c1f12d477d4e01c38ae7192aff8942c25480aad3874e1ec281c8b8c"
+            "size": 23249,
+            "hash": "45419ebef1e544164ad01000539e984bc8b8e5b0d9e7a094afbb2d576a6f3fb9"
         },
         {
             "type": "file",
@@ -530,6 +536,24 @@
             "name": "pb_hooks/pages/_private/climb-media-modals.ejs",
             "size": 31456,
             "hash": "521b5b2e4ac4304375ed729f992f5e84384d7a650bf5e9e2d7bf3fe36b85b1ee"
+        },
+        {
+            "type": "file",
+            "name": "pb_hooks/pages/_private/climb-interactive-island.ejs",
+            "size": 16254,
+            "hash": "79372b9a5a2985b823bbe38f2437bdbf101c139216fcf2bb42f0da99213cfec0"
+        },
+        {
+            "type": "file",
+            "name": "pb_hooks/pages/_private/area-subareas-island.ejs",
+            "size": 10830,
+            "hash": "625c9dc62fab9e6d0302f82e155ce1edd57c63e67a9ec252bd44bf7edfdc9a29"
+        },
+        {
+            "type": "file",
+            "name": "pb_hooks/pages/_private/area-climbs-island.ejs",
+            "size": 42810,
+            "hash": "7a5add4c7b28383b092c8287587d183cef7f4148c087a13adc947dcb2dfb49bf"
         },
         {
             "type": "folder",
@@ -588,8 +612,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/(navbarLayout)/+layout.ejs",
-            "size": 12894,
-            "hash": "b6c099c2435fc38a1b184ef41216adc7480a245f8f19027c2438482a600e858e"
+            "size": 12944,
+            "hash": "b486225549abfe9bac2e200f46f67d5258ddaf87fff0748acc2b45075abb8c51"
         },
         {
             "type": "file",
@@ -622,8 +646,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/(navbarLayout)/climb/[uuid]/[slug].ejs",
-            "size": 23429,
-            "hash": "55e7d371631ff5431b2e9c6fc3402bf76a64cfd19884dbf909bb4824cbf12ffa"
+            "size": 24612,
+            "hash": "e575aa06d172d94bdc867018deb602bf25e3b6d66470d1130a1d371f0d8c7c01"
         },
         {
             "type": "folder",
@@ -638,8 +662,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/(navbarLayout)/area/[uuid]/[slug].ejs",
-            "size": 24439,
-            "hash": "a622e178e19ed2b365a0999ea972738c1b90b89ac3f7e451cb3c95a01b2bd39a"
+            "size": 8572,
+            "hash": "82316398007125a190c2644006973ea9bf826c618713dcf6e21917630ce56362"
         },
         {
             "type": "file",

@@ -105,7 +105,7 @@
                 v-for="child in filteredSubareas"
                 :key="child.id"
                 :href="child.url"
-                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 dark:hover:bg-base-300/90 border border-secondary/20 hover:border-accent/60 rounded-xl p-4 transition-all duration-200 no-underline group shadow-sm hover:shadow-md"
+                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 dark:hover:bg-base-300/90 border border-secondary/20 hover:border-accent/60 rounded-xl p-4 transition-all duration-200 no-underline group shadow-sm hover:shadow-md cursor-pointer"
             >
                 <div class="flex items-start justify-between gap-2">
                     <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
@@ -142,7 +142,7 @@
 <script>
 (function () {
     if (typeof Vue === 'undefined') return;
-    const { createApp, ref, computed, onMounted } = Vue;
+    const { createApp, ref, computed, watch, onMounted } = Vue;
 
     const rootEl = document.getElementById('subareas-island');
     if (!rootEl || rootEl.__vue_app__) return;
@@ -155,16 +155,51 @@
         } catch (_) {}
     }
 
+    const router = window.appRouter || (typeof VueRouter !== 'undefined' ? VueRouter.createRouter({
+        history: VueRouter.createWebHistory(),
+        routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }]
+    }) : null);
+
     const app = createApp({
         setup() {
             const isMounted = ref(false);
             const allSubareas = ref(initialData);
-            const searchQuery = ref('');
-            const typeFilter = ref('ALL');
+
+            let route = null;
+            let routerInstance = null;
+            if (typeof VueRouter !== 'undefined') {
+                try {
+                    route = VueRouter.useRoute();
+                    routerInstance = VueRouter.useRouter();
+                } catch (_) {}
+            }
+
+            const initialType = (route && route.query && typeof route.query.sub_type === 'string')
+                ? route.query.sub_type
+                : 'ALL';
+            const initialQuery = (route && route.query && typeof route.query.sub_q === 'string')
+                ? route.query.sub_q
+                : '';
+
+            const searchQuery = ref(initialQuery);
+            const typeFilter = ref(initialType);
 
             onMounted(() => {
                 isMounted.value = true;
             });
+
+            if (route) {
+                watch(() => route.query.sub_q, (newQ) => {
+                    if (typeof newQ === 'string' && newQ !== searchQuery.value) {
+                        searchQuery.value = newQ;
+                    }
+                });
+                watch(() => route.query.sub_type, (newT) => {
+                    if (typeof newT === 'string' && newT !== typeFilter.value) {
+                        typeFilter.value = newT;
+                    }
+                });
+            }
 
             const boulderCount = computed(() => {
                 return allSubareas.value.filter(s => Boolean(s.isBoulder)).length;
@@ -208,6 +243,9 @@
         }
     });
 
+    if (router) {
+        try { app.use(router); } catch (_) {}
+    }
     app.mount(rootEl);
 })();
 </script>

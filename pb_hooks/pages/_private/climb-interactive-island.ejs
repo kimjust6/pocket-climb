@@ -192,6 +192,11 @@
         try { initialClimb = JSON.parse(dataEl.textContent || '{}'); } catch (_) {}
     }
 
+    const router = window.appRouter || (typeof VueRouter !== 'undefined' ? VueRouter.createRouter({
+        history: VueRouter.createWebHistory(),
+        routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }]
+    }) : null);
+
     const app = createApp({
         setup() {
             const isMounted = ref(false);
@@ -203,6 +208,9 @@
 
             onMounted(() => {
                 isMounted.value = true;
+                if (window.location.hash === '#grade-converter') {
+                    showGradeModal.value = true;
+                }
                 try {
                     const savedUnits = localStorage.getItem('wiki_bloc_units');
                     if (savedUnits === 'imperial' || savedUnits === 'metric') {
@@ -331,6 +339,9 @@
         }
     });
 
+    if (router) {
+        try { app.use(router); } catch (_) {}
+    }
     app.mount(rootEl);
 })();
 </script>

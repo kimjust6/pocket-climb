@@ -2067,7 +2067,7 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         }
     }
 
-    const internationalCountries = rootCountries
+    const allInternationalCountries = rootCountries
         .filter((c) => !usaRoot || c.uuid !== usaRoot.uuid)
         .sort((a, b) => {
             const pA = priorityOrder[a.shortCode] || 99;
@@ -2097,17 +2097,24 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             const locations = mergedLocations.sort((a, b) =>
                 b.totalClimbs - a.totalClimbs || a.name.localeCompare(b.name)
             );
+            return {
+                ...country,
+                isFeaturedCountry: Boolean(priorityOrder[country.shortCode]),
+                locations
+            };
+        });
+
+    const internationalCountries = allInternationalCountries
+        .map((country) => {
             const filteredLocations = qLower
-                ? locations.filter(
+                ? country.locations.filter(
                     (loc) =>
                         loc.name.toLowerCase().includes(qLower) ||
                         country.name.toLowerCase().includes(qLower)
                 )
-                : locations;
-
+                : country.locations;
             return {
                 ...country,
-                isFeaturedCountry: Boolean(priorityOrder[country.shortCode]),
                 locations: filteredLocations
             };
         })
@@ -2123,18 +2130,25 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         ? (childrenByParentUuid[usaRoot.uuid] || []).sort((a, b) => a.name.localeCompare(b.name))
         : [];
 
-    const usaStates = rawUsaStates
+    const allUsaStates = rawUsaStates.map((state) => {
+        const stateDests = (destinationsByGroupUuid[state.uuid] || []).sort(
+            (a, b) => b.totalClimbs - a.totalClimbs || a.name.localeCompare(b.name)
+        );
+        return {
+            ...state,
+            destinations: stateDests
+        };
+    });
+
+    const usaStates = allUsaStates
         .map((state) => {
-            const stateDests = (destinationsByGroupUuid[state.uuid] || []).sort(
-                (a, b) => b.totalClimbs - a.totalClimbs || a.name.localeCompare(b.name)
-            );
             const filteredDestinations = qLower
-                ? stateDests.filter(
+                ? state.destinations.filter(
                     (dest) =>
                         dest.name.toLowerCase().includes(qLower) ||
                         state.name.toLowerCase().includes(qLower)
                 )
-                : stateDests;
+                : state.destinations;
 
             return {
                 ...state,
@@ -2235,10 +2249,17 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
             totalOrganizations: dbStats.totalOrganizations
         },
         internationalCountries,
+        allInternationalCountries,
         usa: usaRoot
             ? {
                 ...usaRoot,
                 states: usaStates
+            }
+            : null,
+        allUsa: usaRoot
+            ? {
+                ...usaRoot,
+                states: allUsaStates
             }
             : null,
         matchingSubAreas,

@@ -4,101 +4,216 @@
     const directoryView = prepareHomepageDirectoryViewData(params, reqObj, data)
 </script>
 
+<!-- Embedded Directory Data for Instant Client-Side Filtering -->
+<script id="homepage-directory-data" type="application/json">
+<%- JSON.stringify({
+    allInternational: directoryView.allInternationalCountries || [],
+    allUsa: directoryView.allUsa || null,
+    quickNavLinks: directoryView.quickNavLinks || [],
+    stats: directoryView.stats || {},
+    initialCountry: directoryView.countryFilter || 'ALL',
+    initialQuery: directoryView.searchQuery || ''
+}).replace(/</g, '\\u003c') %>
+</script>
+
 <script>
 (function () {
-    const { createApp, ref, watch } = Vue;
-    const hasRouter = typeof VueRouter !== 'undefined';
+    const { createApp, ref, computed, onMounted } = Vue;
 
-    const router = hasRouter ? VueRouter.createRouter({
-        history: VueRouter.createWebHistory(),
-        routes: [
-            { path: '/:pathMatch(.*)*', component: { render: () => null } }
-        ]
-    }) : null;
+    let rawData = {};
+    try {
+        const dataEl = document.getElementById('homepage-directory-data');
+        if (dataEl && dataEl.textContent) {
+            rawData = JSON.parse(dataEl.textContent);
+        }
+    } catch (err) {
+        console.warn('Failed to parse homepage directory data:', err);
+    }
 
     const app = createApp({
         setup() {
-            const countryFilter = '<%= directoryView.countryFilter %>';
-            const serverQuery = decodeURIComponent('<%- encodeURIComponent(directoryView.searchQuery || "").replace(/\'/g, "%27") %>');
+            const allInternational = ref(rawData.allInternational || []);
+            const allUsa = ref(rawData.allUsa || null);
+            const quickNavLinks = ref(rawData.quickNavLinks || []);
+            const stats = ref(rawData.stats || {});
 
-            let route = null;
-            let routerInstance = null;
-            if (hasRouter) {
-                route = VueRouter.useRoute();
-                routerInstance = VueRouter.useRouter();
+            // Read initial country from URL search params or embedded data
+            let initialCountry = 'ALL';
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const qCountry = urlParams.get('country');
+                if (qCountry) {
+                    initialCountry = qCountry.toUpperCase();
+                } else if (rawData.initialCountry) {
+                    initialCountry = rawData.initialCountry.toUpperCase();
+                }
+            } catch (_) {
+                initialCountry = rawData.initialCountry || 'ALL';
             }
 
-            const initialQuery = (route && route.query && typeof route.query.query === 'string')
-                ? route.query.query
-                : serverQuery;
+            const countryFilter = ref(initialCountry);
+
+            let initialQuery = '';
+            try {
+                const urlParams = new URLSearchParams(window.location.search);
+                initialQuery = urlParams.get('query') || rawData.initialQuery || '';
+            } catch (_) {
+                initialQuery = rawData.initialQuery || '';
+            }
             const searchQuery = ref(initialQuery);
 
-            if (route) {
-                watch(() => route.query.query, (newQ) => {
-                    searchQuery.value = typeof newQ === 'string' ? newQ : '';
-                });
+            function updateUrl() {
+                const queryObj = {};
+                if (countryFilter.value && countryFilter.value !== 'ALL') {
+                    queryObj.country = countryFilter.value;
+                }
+                const q = (searchQuery.value || '').trim();
+                if (q) {
+                    queryObj.query = q;
+                }
+                const params = new URLSearchParams(queryObj);
+                const qs = params.toString();
+                const newUrl = qs ? `/?${qs}` : '/';
+
+                try {
+                    window.history.pushState({ country: countryFilter.value, query: q }, '', newUrl);
+                } catch (_) {}
+            }
+
+            function selectCountry(code) {
+                const normalized = (code || 'ALL').toUpperCase();
+                if (countryFilter.value === normalized) return;
+                countryFilter.value = normalized;
+                updateUrl();
             }
 
             function handleSearch() {
-                const q = (searchQuery.value || '').trim();
-                const queryObj = {};
-                if (q) queryObj.query = q;
-                if (countryFilter && countryFilter !== 'ALL') {
-                    queryObj.country = countryFilter;
-                }
-
-                if (routerInstance) {
-                    const target = routerInstance.resolve({ path: '/', query: queryObj }).href;
-                    window.location.href = target;
-                } else {
-                    const params = new URLSearchParams(queryObj);
-                    const qs = params.toString();
-                    window.location.href = qs ? `/?${qs}` : '/';
-                }
+                updateUrl();
             }
 
             function clearSearch() {
                 searchQuery.value = '';
-                if (!serverQuery) {
-                    return;
-                }
-                const queryObj = {};
-                if (countryFilter && countryFilter !== 'ALL') {
-                    queryObj.country = countryFilter;
-                }
-
-                if (routerInstance) {
-                    const target = routerInstance.resolve({ path: '/', query: queryObj }).href;
-                    window.location.href = target;
-                } else {
-                    const qs = countryFilter && countryFilter !== 'ALL'
-                        ? `?country=${encodeURIComponent(countryFilter)}`
-                        : '';
-                    window.location.href = `/${qs}`;
-                }
+                updateUrl();
             }
 
-            return { searchQuery, handleSearch, clearSearch };
+            function resetFilters() {
+                countryFilter.value = 'ALL';
+                searchQuery.value = '';
+                updateUrl();
+            }
+
+            // Listen to browser Back/Forward navigation
+            window.addEventListener('popstate', () => {
+                try {
+                    const params = new URLSearchParams(window.location.search);
+                    const c = params.get('country') || 'ALL';
+                    const q = params.get('query') || '';
+                    countryFilter.value = c.toUpperCase();
+                    searchQuery.value = q;
+                } catch (_) {}
+            });
+
+            // Filtered international countries for the bottom component
+            const displayedInternational = computed(() => {
+                const cf = countryFilter.value;
+                if (cf === 'USA') return [];
+
+                const q = (searchQuery.value || '').toLowerCase().trim();
+
+                return allInternational.value
+                    .map(country => {
+                        const filteredLocations = q
+                            ? (country.locations || []).filter(loc =>
+                                loc.name.toLowerCase().includes(q) || country.name.toLowerCase().includes(q)
+                              )
+                            : (country.locations || []);
+                        return {
+                            ...country,
+                            locations: filteredLocations
+                        };
+                    })
+                    .filter(country => {
+                        if (cf && cf !== 'ALL' && cf !== 'INTL') {
+                            const sc = (country.shortCode || '').toUpperCase();
+                            const uid = (country.uuid || country.id || '').toUpperCase();
+                            const name = (country.name || '').toUpperCase();
+                            if (sc !== cf && uid !== cf && name !== cf) return false;
+                        }
+                        if (!q) return true;
+                        if (country.name.toLowerCase().includes(q) || (country.shortCode && country.shortCode.toLowerCase().includes(q))) {
+                            return true;
+                        }
+                        return (country.locations && country.locations.length > 0);
+                    });
+            });
+
+            // Filtered USA states & destinations for the bottom component
+            const displayedUsa = computed(() => {
+                const cf = countryFilter.value;
+                if (cf && cf !== 'ALL' && cf !== 'USA') {
+                    return null;
+                }
+                if (!allUsa.value) return null;
+
+                const q = (searchQuery.value || '').toLowerCase().trim();
+                const rawStates = allUsa.value.states || [];
+
+                const filteredStates = rawStates
+                    .map(state => {
+                        const filteredDests = q
+                            ? (state.destinations || []).filter(dest =>
+                                dest.name.toLowerCase().includes(q) || state.name.toLowerCase().includes(q)
+                              )
+                            : (state.destinations || []);
+                        return {
+                            ...state,
+                            destinations: filteredDests
+                        };
+                    })
+                    .filter(state => {
+                        if (!q) return true;
+                        if (state.name.toLowerCase().includes(q) || (state.shortCode && state.shortCode.toLowerCase().includes(q))) {
+                            return true;
+                        }
+                        return (state.destinations && state.destinations.length > 0);
+                    });
+
+                if (filteredStates.length === 0 && q) {
+                    return null;
+                }
+
+                return {
+                    ...allUsa.value,
+                    states: filteredStates
+                };
+            });
+
+            const hasResults = computed(() => {
+                const hasIntl = displayedInternational.value && displayedInternational.value.length > 0;
+                const hasUs = displayedUsa.value && displayedUsa.value.states && displayedUsa.value.states.length > 0;
+                return hasIntl || hasUs;
+            });
+
+            return {
+                countryFilter,
+                searchQuery,
+                quickNavLinks,
+                stats,
+                displayedInternational,
+                displayedUsa,
+                hasResults,
+                selectCountry,
+                handleSearch,
+                clearSearch,
+                resetFilters
+            };
         }
     });
-
-    if (router) {
-        app.use(router);
-    }
 
     function mount() {
         const root = document.getElementById('location-directory-app');
         if (!root || root.__vue_app__) return;
-
-        if (router) {
-            router.isReady().then(() => {
-                if (!root.__vue_app__) {
-                    app.mount(root);
-                }
-            });
-        } else {
-            app.mount(root);
-        }
+        app.mount(root);
     }
 
     if (document.readyState === 'loading') {
@@ -109,25 +224,27 @@
 })();
 </script>
 
-<div id="location-directory-app" v-cloak class="bg-base-100 pt-10 pb-20 not-prose">
+<div id="location-directory-app" class="bg-base-100 pt-10 pb-20 not-prose">
     <div class="max-w-6xl mx-auto px-4 sm:px-6">
 
-        <!-- OpenBeta-style Quick Country Nav & Search Bar -->
+        <!-- OpenBeta-style Quick Country Nav & Search Bar Card -->
         <div class="card dark:bg-base-300/70 bg-base-300/60 backdrop-blur-xl border border-secondary/20 rounded-2xl p-4 sm:p-6 mb-12 shadow-lg">
             <div class="flex flex-col lg:flex-row items-center justify-between gap-4">
-                <!-- Quick Country Pills (mirrors openbeta.io top bar) -->
+                <!-- Quick Country Filter Buttons (Click to update bottom component without page reload) -->
                 <div class="flex flex-wrap items-center justify-center lg:justify-start gap-2">
                     <% (directoryView.quickNavLinks || []).forEach(link => { %>
                         <% const isActive = directoryView.countryFilter === link.code; %>
-                        <a href="<%= link.href %>"
-                            class="badge lg:badge-lg gap-1.5 py-3 px-3.5 font-semibold no-underline border transition-all duration-200 cursor-pointer <%= isActive ? 'bg-accent text-accent-content border-accent shadow-md' : 'bg-base-100/70 border-base-content/20 text-base-content hover:bg-base-content hover:text-base-100' %>">
+                        <button type="button"
+                            @click="selectCountry('<%= link.code %>')"
+                            class="badge lg:badge-lg gap-1.5 py-3 px-3.5 font-semibold no-underline border transition-all duration-200 cursor-pointer <%= isActive ? 'bg-accent text-accent-content border-accent shadow-md' : 'bg-base-100/70 border-base-content/20 text-base-content hover:bg-base-content hover:text-base-100' %>"
+                            :class="countryFilter === '<%= link.code %>' ? 'bg-accent text-accent-content border-accent shadow-md' : 'bg-base-100/70 border-base-content/20 text-base-content hover:bg-base-content hover:text-base-100'">
                             <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                                <circle cx="12" cy="12" r="10"/>
-                                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/>
-                                <path d="M2 12h20"/>
+                                <circle cx="12" cy="12" r="10"></circle>
+                                <path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"></path>
+                                <path d="M2 12h20"></path>
                             </svg>
                             <span><%= link.label %></span>
-                        </a>
+                        </button>
                     <% }); %>
                 </div>
 
@@ -139,7 +256,7 @@
                             v-model="searchQuery"
                             class="input input-bordered input-sm sm:input-md w-full rounded-full bg-base-100 border border-base-content/30 pl-4 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                             placeholder="Filter countries, states, or crags..."
-                            @keydown.enter="handleSearch" />
+                            @keydown.enter.prevent="handleSearch" />
                         <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                             <button v-show="searchQuery" @click="clearSearch" type="button"
                                 class="btn btn-ghost btn-xs btn-circle text-base-content/70 hover:text-base-content"
@@ -169,58 +286,122 @@
                     <span>•</span>
                     <span><strong class="text-secondary"><%= directoryView.stats.formattedTotalTicks %></strong> Ticks</span>
                 </div>
-                <% if (directoryView.hasSearchQuery || directoryView.countryFilter !== 'ALL') { %>
-                    <a href="/" class="text-accent hover:underline font-medium">Reset filters</a>
-                <% } %>
+                <button v-show="countryFilter !== 'ALL' || searchQuery"
+                    @click="resetFilters"
+                    type="button"
+                    class="text-accent hover:underline font-medium cursor-pointer bg-transparent border-0 p-0 text-xs">
+                    Reset filters
+                </button>
             </div>
         </div>
 
-        <% if (!directoryView.hasResults) { %>
-            <div class="mx-auto max-w-xl py-16 text-center">
+        <!-- DYNAMIC DIRECTORY CONTENT (Bottom Component Reloaded Reactively) -->
+        <div id="directory-content-section">
+            <div v-if="!hasResults" class="mx-auto max-w-xl py-16 text-center">
                 <h2 class="mb-4 text-3xl font-bold text-accent">No climbing locations found</h2>
                 <p class="mb-6 text-base text-base-content/80">
-                    No countries, states, or climbing destinations matched "<%= directoryView.searchQuery %>".
+                    No countries, states, or climbing destinations matched your filter.
                 </p>
-                <a href="/" class="btn btn-primary btn-sm rounded-xl">Show All Locations</a>
+                <button type="button" @click="resetFilters" class="btn btn-primary btn-sm rounded-xl">
+                    Show All Locations
+                </button>
             </div>
-        <% } else { %>
 
             <!-- INTERNATIONAL SECTION -->
-            <% if (directoryView.internationalCountries.length > 0) { %>
-                <section class="block w-full mb-16" aria-labelledby="heading-international">
-                    <div class="flex items-end justify-between mb-2">
-                        <h2 id="heading-international" class="text-2xl sm:text-3xl font-bold text-base-content tracking-tight">
-                            International
-                        </h2>
-                        <span class="text-xs text-base-content/60 font-medium">
-                            <%= directoryView.internationalCountries.length %> <%= directoryView.internationalCountries.length === 1 ? 'country' : 'countries' %>
-                        </span>
-                    </div>
-                    <hr class="mb-6 border-t-2 border-base-content" />
+            <section v-if="displayedInternational.length > 0" class="block w-full mb-16" aria-labelledby="heading-international">
+                <div class="flex items-end justify-between mb-2">
+                    <h2 id="heading-international" class="text-2xl sm:text-3xl font-bold text-base-content tracking-tight">
+                        International
+                    </h2>
+                    <span class="text-xs text-base-content/60 font-medium">
+                        {{ displayedInternational.length }} {{ displayedInternational.length === 1 ? 'country' : 'countries' }}
+                    </span>
+                </div>
+                <hr class="mb-6 border-t-2 border-base-content" />
 
+                <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
+                    <div v-for="country in displayedInternational" :key="country.id" class="mb-8 break-inside-avoid-column break-inside-avoid">
+                        <a :href="country.url"
+                            class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
+                            <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                {{ country.name }}
+                            </span>
+                            <span class="text-xs text-base-content/70 font-mono">
+                                {{ country.formattedClimbs }}
+                            </span>
+                        </a>
+                        <hr class="my-1.5 border-t border-base-content/40" />
+                        <div v-if="country.locations && country.locations.length > 0" class="flex flex-col gap-1 mt-1.5">
+                            <a v-for="loc in country.locations" :key="loc.id" :href="loc.url"
+                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
+                                <span class="truncate pr-2">{{ loc.name }}</span>
+                                <span v-if="loc.totalClimbs > 0" class="text-[11px] text-base-content/50 font-mono shrink-0">
+                                    {{ loc.formattedClimbs }}
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- USA SECTION -->
+            <section v-if="displayedUsa && displayedUsa.states && displayedUsa.states.length > 0" class="block w-full" aria-labelledby="heading-usa">
+                <div class="flex items-end justify-between mb-2">
+                    <a :href="displayedUsa.url"
+                        class="flex flex-row items-center gap-2 no-underline group">
+                        <h2 id="heading-usa" class="text-2xl sm:text-3xl font-bold text-base-content group-hover:text-accent transition-colors tracking-tight">
+                            USA
+                        </h2>
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+                            class="w-5 h-5 text-base-content/70 group-hover:text-accent group-hover:translate-x-0.5 transition-all">
+                            <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clip-rule="evenodd" />
+                        </svg>
+                    </a>
+                    <span class="text-xs text-base-content/70 font-mono">
+                        {{ displayedUsa.formattedClimbs }} climbs
+                    </span>
+                </div>
+                <hr class="mb-6 border-t-2 border-base-content" />
+
+                <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
+                    <div v-for="state in displayedUsa.states" :key="state.id" class="mb-8 break-inside-avoid-column break-inside-avoid">
+                        <a :href="state.url"
+                            class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
+                            <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                {{ state.name }}
+                            </span>
+                            <span class="text-xs text-base-content/70 font-mono">
+                                {{ state.formattedClimbs }}
+                            </span>
+                        </a>
+                        <hr class="my-1.5 border-t border-base-content/40" />
+                        <div v-if="state.destinations && state.destinations.length > 0" class="flex flex-col gap-1 mt-1.5">
+                            <a v-for="dest in state.destinations" :key="dest.id" :href="dest.url"
+                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
+                                <span class="truncate pr-2">{{ dest.name }}</span>
+                                <span v-if="dest.totalClimbs > 0" class="text-[11px] text-base-content/50 font-mono shrink-0">
+                                    {{ dest.formattedClimbs }}
+                                </span>
+                            </a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Static Fallback for Search Engine Crawlers & Non-JS Clients -->
+        <noscript>
+            <% if (directoryView.internationalCountries.length > 0) { %>
+                <section class="block w-full mb-16">
+                    <h2 class="text-2xl font-bold mb-4">International</h2>
                     <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
                         <% directoryView.internationalCountries.forEach(country => { %>
-                            <div class="mb-8 break-inside-avoid-column break-inside-avoid">
-                                <a href="<%= country.url %>"
-                                    class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
-                                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
-                                        <%= country.name %>
-                                    </span>
-                                    <span class="text-xs text-base-content/70 font-mono">
-                                        <%= country.formattedClimbs %>
-                                    </span>
-                                </a>
-                                <hr class="my-1.5 border-t border-base-content/40" />
+                            <div class="mb-8">
+                                <a href="<%= country.url %>" class="font-semibold text-base text-secondary"><%= country.name %></a>
                                 <% if (country.locations && country.locations.length > 0) { %>
                                     <div class="flex flex-col gap-1 mt-1.5">
                                         <% country.locations.forEach(loc => { %>
-                                            <a href="<%= loc.url %>"
-                                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
-                                                <span class="truncate pr-2"><%= loc.name %></span>
-                                                <% if (loc.totalClimbs > 0) { %>
-                                                    <span class="text-[11px] text-base-content/50 font-mono shrink-0"><%= loc.formattedClimbs %></span>
-                                                <% } %>
-                                            </a>
+                                            <a href="<%= loc.url %>" class="text-xs text-base-content/90"><%= loc.name %></a>
                                         <% }); %>
                                     </div>
                                 <% } %>
@@ -229,50 +410,17 @@
                     </div>
                 </section>
             <% } %>
-
-            <!-- USA SECTION -->
             <% if (directoryView.usa && directoryView.usa.states.length > 0) { %>
-                <section class="block w-full" aria-labelledby="heading-usa">
-                    <div class="flex items-end justify-between mb-2">
-                        <a href="<%= directoryView.usa.url %>"
-                            class="flex flex-row items-center gap-2 no-underline group">
-                            <h2 id="heading-usa" class="text-2xl sm:text-3xl font-bold text-base-content group-hover:text-accent transition-colors tracking-tight">
-                                USA
-                            </h2>
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
-                                class="w-5 h-5 text-base-content/70 group-hover:text-accent group-hover:translate-x-0.5 transition-all">
-                                <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clip-rule="evenodd" />
-                            </svg>
-                        </a>
-                        <span class="text-xs text-base-content/70 font-mono">
-                            <%= directoryView.usa.formattedClimbs %> climbs
-                        </span>
-                    </div>
-                    <hr class="mb-6 border-t-2 border-base-content" />
-
+                <section class="block w-full">
+                    <h2 class="text-2xl font-bold mb-4">USA</h2>
                     <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
                         <% directoryView.usa.states.forEach(state => { %>
-                            <div class="mb-8 break-inside-avoid-column break-inside-avoid">
-                                <a href="<%= state.url %>"
-                                    class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
-                                    <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
-                                        <%= state.name %>
-                                    </span>
-                                    <span class="text-xs text-base-content/70 font-mono">
-                                        <%= state.formattedClimbs %>
-                                    </span>
-                                </a>
-                                <hr class="my-1.5 border-t border-base-content/40" />
+                            <div class="mb-8">
+                                <a href="<%= state.url %>" class="font-semibold text-base text-secondary"><%= state.name %></a>
                                 <% if (state.destinations && state.destinations.length > 0) { %>
                                     <div class="flex flex-col gap-1 mt-1.5">
                                         <% state.destinations.forEach(dest => { %>
-                                            <a href="<%= dest.url %>"
-                                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
-                                                <span class="truncate pr-2"><%= dest.name %></span>
-                                                <% if (dest.totalClimbs > 0) { %>
-                                                    <span class="text-[11px] text-base-content/50 font-mono shrink-0"><%= dest.formattedClimbs %></span>
-                                                <% } %>
-                                            </a>
+                                            <a href="<%= dest.url %>" class="text-xs text-base-content/90"><%= dest.name %></a>
                                         <% }); %>
                                     </div>
                                 <% } %>
@@ -281,68 +429,7 @@
                     </div>
                 </section>
             <% } %>
+        </noscript>
 
-            <!-- MATCHING SUB-AREAS / CRAGS FROM DB WHEN SEARCHING -->
-            <% if (directoryView.matchingSubAreas && directoryView.matchingSubAreas.length > 0) { %>
-                <section class="block w-full mt-12" aria-labelledby="heading-matching-areas">
-                    <div class="flex items-end justify-between mb-2">
-                        <h2 id="heading-matching-areas" class="text-2xl font-bold text-base-content tracking-tight">
-                            Matching Sub-Areas & Crags (<%= directoryView.matchingSubAreas.length %>)
-                        </h2>
-                    </div>
-                    <hr class="mb-6 border-t-2 border-base-content" />
-                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        <% directoryView.matchingSubAreas.forEach(area => { %>
-                            <a href="<%= area.url %>"
-                                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 border border-secondary/20 hover:border-accent/50 rounded-xl p-4 no-underline transition-all">
-                                <div class="flex items-start justify-between gap-2">
-                                    <span class="font-semibold text-sm text-secondary"><%= area.name %></span>
-                                    <% if (area.totalClimbs > 0) { %>
-                                        <span class="badge badge-sm bg-base-100/80 border border-base-content/20 text-base-content/80 font-mono shrink-0">
-                                            <%= area.formattedClimbs %>
-                                        </span>
-                                    <% } %>
-                                </div>
-                                <% if (area.pathSummary) { %>
-                                    <span class="text-xs text-base-content/60 mt-1 truncate"><%= area.pathSummary %></span>
-                                <% } %>
-                            </a>
-                        <% }); %>
-                    </div>
-                </section>
-            <% } %>
-
-            <!-- MATCHING CLIMBS FROM DB WHEN SEARCHING -->
-            <% if (directoryView.matchingClimbs && directoryView.matchingClimbs.length > 0) { %>
-                <section class="block w-full mt-12" aria-labelledby="heading-matching-climbs">
-                    <div class="flex items-end justify-between mb-2">
-                        <h2 id="heading-matching-climbs" class="text-2xl font-bold text-base-content tracking-tight">
-                            Matching Climbs (<%= directoryView.matchingClimbs.length %>)
-                        </h2>
-                    </div>
-                    <hr class="mb-6 border-t-2 border-base-content" />
-                    <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                        <% directoryView.matchingClimbs.forEach(cl => { %>
-                            <a href="<%= cl.url %>"
-                                class="card dark:bg-base-300/70 bg-base-300/60 hover:bg-base-300/90 border border-secondary/20 hover:border-accent/50 rounded-xl p-4 no-underline transition-all">
-                                <div class="flex items-start justify-between gap-2">
-                                    <span class="font-semibold text-sm text-secondary"><%= cl.name %></span>
-                                    <% if (cl.grade) { %>
-                                        <span class="badge badge-accent badge-sm font-mono font-bold shrink-0">
-                                            <%= cl.grade %>
-                                        </span>
-                                    <% } %>
-                                </div>
-                                <% if (cl.pathSummary) { %>
-                                    <span class="text-xs text-base-content/60 mt-1 truncate"><%= cl.pathSummary %></span>
-                                <% } %>
-                            </a>
-                        <% }); %>
-                    </div>
-                </section>
-            <% } %>
-
-        <% } %>
     </div>
 </div>
-

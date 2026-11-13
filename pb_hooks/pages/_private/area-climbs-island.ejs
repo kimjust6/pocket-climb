@@ -348,17 +348,17 @@
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <h3 class="text-lg font-bold text-secondary mt-0 mb-0">
-                                <a :href="climb.url" class="text-secondary hover:text-accent transition-colors no-underline">
+                                <router-link :to="climb.url" class="text-secondary hover:text-accent transition-colors no-underline">
                                     {{ climb.name }}
-                                </a>
+                                </router-link>
                             </h3>
-                            <a
+                            <router-link
                                 v-if="climb.subAreaName && climb.subAreaUrl"
-                                :href="climb.subAreaUrl"
+                                :to="climb.subAreaUrl"
                                 class="inline-block text-xs text-accent hover:underline font-medium mt-0.5 no-underline"
                             >
                                 📍 {{ climb.subAreaName }}
-                            </a>
+                            </router-link>
                             <p v-if="climb.fa" class="text-xs text-base-content/60 mt-0.5 my-0">
                                 FA: {{ climb.fa }}
                             </p>
@@ -367,24 +367,24 @@
                         <!-- Grades & Safety -->
                         <div class="flex flex-wrap items-center justify-end gap-1.5 shrink-0">
                             <template v-if="climb.allGrades && climb.allGrades.length > 0">
-                                <a
+                                <router-link
                                     v-for="(g, gIdx) in climb.allGrades"
                                     :key="g.system + g.value"
-                                    :href="'/?query=' + encodeURIComponent(g.value)"
+                                    :to="'/?query=' + encodeURIComponent(g.value)"
                                     class="badge font-mono no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer"
                                     :class="gIdx === 0 ? 'badge-accent font-bold' : 'badge-outline border-accent/40 text-base-content/80 badge-sm'"
                                     :title="g.system + ' Grade'"
                                 >
                                     {{ g.value }}
-                                </a>
+                                </router-link>
                             </template>
-                            <a
+                            <router-link
                                 v-else-if="climb.primaryGrade"
-                                :href="'/?query=' + encodeURIComponent(climb.primaryGrade)"
+                                :to="'/?query=' + encodeURIComponent(climb.primaryGrade)"
                                 class="badge badge-accent font-mono font-bold no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer"
                             >
                                 {{ climb.primaryGrade }}
-                            </a>
+                            </router-link>
                             <span v-if="climb.safety" class="badge badge-warning badge-sm font-mono">
                                 {{ climb.safety }}
                             </span>
@@ -393,14 +393,14 @@
 
                     <!-- Disciplines, Length, Coordinates -->
                     <div class="flex flex-wrap items-center gap-2 mt-3">
-                        <a
+                        <router-link
                             v-for="disc in climb.disciplines || []"
                             :key="disc"
-                            :href="'/?query=' + encodeURIComponent(disc)"
+                            :to="'/?query=' + encodeURIComponent(disc)"
                             class="badge badge-sm bg-base-100/70 border border-accent/30 text-base-content uppercase text-[10px] tracking-wider no-underline hover:bg-base-content hover:text-base-100 transition-all duration-200 cursor-pointer"
                         >
                             {{ disc }}
-                        </a>
+                        </router-link>
                         <span v-if="climb.length > 0" class="text-xs text-base-content/70 font-mono">
                             {{ climb.length }}m
                         </span>
@@ -516,9 +516,13 @@
                             <a :href="climb.url" class="hover:text-accent no-underline font-bold">
                                 {{ climb.name }}
                             </a>
-                            <span v-if="climb.subAreaName" class="block text-[11px] text-base-content/60 font-normal">
+                            <a
+                                v-if="climb.subAreaName && climb.subAreaUrl"
+                                :href="climb.subAreaUrl"
+                                class="block text-[11px] text-base-content/60 font-normal hover:underline no-underline"
+                            >
                                 📍 {{ climb.subAreaName }}
-                            </span>
+                            </a>
                         </td>
                         <td>
                             <a
@@ -576,7 +580,7 @@
 <script>
 (function () {
     if (typeof Vue === 'undefined') return;
-    const { createApp, ref, computed, onMounted } = Vue;
+    const { createApp, ref, computed, watch, onMounted } = Vue;
 
     const rootEl = document.getElementById('area-climbs-island');
     if (!rootEl || rootEl.__vue_app__) return;
@@ -594,16 +598,43 @@
         try { initialAuth = JSON.parse(authDataEl.textContent || '{}'); } catch (_) {}
     }
 
+    const router = window.appRouter || (typeof VueRouter !== 'undefined' ? VueRouter.createRouter({
+        history: VueRouter.createWebHistory(),
+        routes: [{ path: '/:pathMatch(.*)*', component: { render: () => null } }]
+    }) : null);
+
     const app = createApp({
         setup() {
             const isMounted = ref(false);
             const allClimbs = ref(initialClimbs);
             const auth = ref(initialAuth);
 
-            const searchQuery = ref('');
-            const disciplineFilter = ref('ALL');
-            const gradeTierFilter = ref('ALL');
-            const sortBy = ref('default');
+            let route = null;
+            let routerInstance = null;
+            if (typeof VueRouter !== 'undefined') {
+                try {
+                    route = VueRouter.useRoute();
+                    routerInstance = VueRouter.useRouter();
+                } catch (_) {}
+            }
+
+            const initialQ = (route && route.query && typeof route.query.climb_q === 'string')
+                ? route.query.climb_q
+                : '';
+            const initialDisc = (route && route.query && typeof route.query.disc === 'string')
+                ? route.query.disc
+                : 'ALL';
+            const initialTier = (route && route.query && typeof route.query.tier === 'string')
+                ? route.query.tier
+                : 'ALL';
+            const initialSort = (route && route.query && typeof route.query.sort === 'string')
+                ? route.query.sort
+                : 'default';
+
+            const searchQuery = ref(initialQ);
+            const disciplineFilter = ref(initialDisc);
+            const gradeTierFilter = ref(initialTier);
+            const sortBy = ref(initialSort);
             const viewMode = ref('grid');
 
             onMounted(() => {
@@ -615,6 +646,24 @@
                     }
                 } catch (_) {}
             });
+
+            if (route) {
+                watch(() => route.query.climb_q, (newQ) => {
+                    if (typeof newQ === 'string' && newQ !== searchQuery.value) {
+                        searchQuery.value = newQ;
+                    }
+                });
+                watch(() => route.query.disc, (newD) => {
+                    if (typeof newD === 'string' && newD !== disciplineFilter.value) {
+                        disciplineFilter.value = newD;
+                    }
+                });
+                watch(() => route.query.tier, (newT) => {
+                    if (typeof newT === 'string' && newT !== gradeTierFilter.value) {
+                        gradeTierFilter.value = newT;
+                    }
+                });
+            }
 
             // Extract unique disciplines with route counts
             const availableDisciplines = computed(() => {
@@ -712,6 +761,9 @@
         }
     });
 
+    if (router) {
+        try { app.use(router); } catch (_) {}
+    }
     app.mount(rootEl);
 })();
 </script>
