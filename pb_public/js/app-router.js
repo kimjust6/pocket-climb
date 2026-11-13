@@ -43,6 +43,130 @@
     let currentAbortController = null;
     let lastRenderedPath = window.location.pathname;
 
+    // In-memory HTML Page Cache for Instant Navigation
+    const pageCache = new Map();
+    const inFlightPrefetches = new Map();
+    const PAGE_CACHE_TTL_MS = 3 * 60 * 1000; // 3 minutes
+
+    function getCachedPage(url) {
+        const entry = pageCache.get(url);
+        if (!entry) return null;
+        if (Date.now() - entry.time > PAGE_CACHE_TTL_MS) {
+            pageCache.delete(url);
+            return null;
+        }
+        return entry;
+    }
+
+    function setCachedPage(url, data) {
+        if (pageCache.size > 80) {
+            const oldestKey = pageCache.keys().next().value;
+            pageCache.delete(oldestKey);
+        }
+        pageCache.set(url, { ...data, time: Date.now() });
+    }
+
+    // Top subtle progress bar
+    let progressBar = null;
+    let progressTimer = null;
+
+    function getProgressBar() {
+        if (!progressBar) {
+            progressBar = document.createElement('div');
+            progressBar.id = 'app-router-progress';
+            progressBar.className = 'fixed top-0 left-0 right-0 h-[2.5px] bg-accent z-[99999] pointer-events-none transition-all duration-300 opacity-0';
+            progressBar.style.width = '0%';
+            document.body.appendChild(progressBar);
+        }
+        return progressBar;
+    }
+
+    function startProgress() {
+        clearTimeout(progressTimer);
+        const bar = getProgressBar();
+        bar.style.transition = 'none';
+        bar.style.width = '20%';
+        bar.style.opacity = '1';
+        progressTimer = setTimeout(() => {
+            bar.style.transition = 'width 600ms cubic-bezier(0.1, 0.9, 0.2, 1)';
+            bar.style.width = '75%';
+        }, 50);
+    }
+
+    function finishProgress() {
+        clearTimeout(progressTimer);
+        if (!progressBar) return;
+        progressBar.style.transition = 'width 150ms ease-out, opacity 200ms ease-out 150ms';
+        progressBar.style.width = '100%';
+        progressBar.style.opacity = '0';
+        setTimeout(() => {
+            if (progressBar) progressBar.style.width = '0%';
+        }, 400);
+    }
+
+    /**
+     * Fetch page HTML with deduplication and in-memory caching
+     */
+    async function fetchPage(targetUrl, signal = null) {
+        const cached = getCachedPage(targetUrl);
+        if (cached) return cached;
+
+        if (inFlightPrefetches.has(targetUrl)) {
+            try {
+                return await inFlightPrefetches.get(targetUrl);
+            } catch (_) {
+                inFlightPrefetches.delete(targetUrl);
+            }
+        }
+
+        const promise = (async () => {
+            try {
+                const res = await fetch(targetUrl, {
+                    signal,
+                    headers: { 'X-Requested-With': 'VueRouter' }
+                });
+                if (!res.ok) {
+                    throw new Error(`HTTP ${res.status}`);
+                }
+                const finalUrl = res.url || targetUrl;
+                const html = await res.text();
+                const data = { finalUrl, html };
+
+                setCachedPage(targetUrl, data);
+                if (finalUrl !== targetUrl) {
+                    setCachedPage(finalUrl, data);
+                }
+                return data;
+            } finally {
+                inFlightPrefetches.delete(targetUrl);
+            }
+        })();
+
+        inFlightPrefetches.set(targetUrl, promise);
+        return promise;
+    }
+
+    /**
+     * Prefetch a URL on hover or touch before click
+     */
+    function prefetchUrl(targetHref) {
+        if (!targetHref || targetHref.startsWith('#')) return;
+        try {
+            const url = new URL(targetHref, window.location.origin);
+            if (url.origin !== window.location.origin) return;
+            if (url.pathname === window.location.pathname && url.search === window.location.search) return;
+            if (url.pathname.startsWith('/api/') || url.pathname === '/logout') return;
+
+            const normalized = url.pathname + url.search;
+            if (getCachedPage(normalized) || inFlightPrefetches.has(normalized)) return;
+
+            const schedulePrefetch = window.requestIdleCallback || ((cb) => setTimeout(cb, 10));
+            schedulePrefetch(() => {
+                fetchPage(normalized).catch(() => {});
+            });
+        } catch (_) {}
+    }
+
     /**
      * Update active navigation link styles in navbar and sidebar
      */
@@ -93,7 +217,7 @@
      */
     function executeScripts(container) {
         if (!container) return;
-        const scripts = container.querySelectorAll('script');
+        const scripts = Array.from(container.querySelectorAll('script'));
         scripts.forEach((oldScript) => {
             const type = oldScript.getAttribute('type') || '';
             // Skip data islands (JSON)
@@ -106,7 +230,9 @@
                     newScript.setAttribute(attr.name, attr.value);
                 });
                 newScript.textContent = oldScript.textContent;
-                oldScript.parentNode.replaceChild(newScript, oldScript);
+                if (oldScript.parentNode) {
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                }
             } catch (err) {
                 console.warn('Script execution caught warning:', err);
             }
@@ -124,25 +250,22 @@
         isNavigating = true;
         currentAbortController = new AbortController();
 
-        try {
-            const res = await fetch(targetUrl, {
-                signal: currentAbortController.signal,
-                headers: {
-                    'X-Requested-With': 'VueRouter'
-                }
-            });
+        const isCached = Boolean(getCachedPage(targetUrl));
+        if (!isCached) {
+            startProgress();
+        }
 
-            if (!res.ok) {
-                window.location.href = targetUrl;
-                return;
+        try {
+            const pageData = await fetchPage(targetUrl, currentAbortController.signal);
+            if (!isCached) {
+                finishProgress();
             }
 
-            const finalUrl = res.url || targetUrl;
+            const finalUrl = pageData.finalUrl || targetUrl;
             const parsedTarget = new URL(finalUrl, window.location.origin);
 
-            const html = await res.text();
             const parser = new DOMParser();
-            const doc = parser.parseFromString(html, 'text/html');
+            const doc = parser.parseFromString(pageData.html, 'text/html');
 
             const newMain = doc.querySelector('#main-content');
             const currentMain = document.querySelector('#main-content');
@@ -190,23 +313,23 @@
                 curJsonLd.textContent = newJsonLd.textContent;
             }
 
-            // Update browser URL before DOM swap so components read current location
-            if (pushState && window.location.href !== parsedTarget.href) {
-                window.history.pushState({}, '', parsedTarget.href);
-            }
-            lastRenderedPath = parsedTarget.pathname;
-
-            // Sync VueRouter's internal state
-            try {
-                router.replace(parsedTarget.pathname + parsedTarget.search + parsedTarget.hash);
-            } catch (_) {}
-
-            // Perform DOM replacement
-            const doSwap = () => {
+            // Perform DOM replacement first, then update browser history upon success
+            const performSwap = () => {
                 unmountIslands(currentMain);
                 currentMain.innerHTML = newMain.innerHTML;
                 executeScripts(currentMain);
                 updateActiveNavLinks(parsedTarget.pathname);
+
+                if (pushState && window.location.href !== parsedTarget.href) {
+                    window.history.pushState({}, '', parsedTarget.href);
+                }
+                lastRenderedPath = parsedTarget.pathname;
+
+                try {
+                    if (router && typeof router.replace === 'function') {
+                        router.replace(parsedTarget.pathname + parsedTarget.search + parsedTarget.hash).catch(() => {});
+                    }
+                } catch (_) {}
 
                 if (parsedTarget.hash) {
                     const targetEl = document.querySelector(parsedTarget.hash);
@@ -214,7 +337,7 @@
                         targetEl.scrollIntoView({ behavior: 'smooth' });
                     }
                 } else {
-                    window.scrollTo({ top: 0, behavior: 'instant' });
+                    window.scrollTo(0, 0);
                 }
 
                 // Close mobile sidebar drawer if open
@@ -222,17 +345,20 @@
                 if (drawer && drawer.checked) drawer.checked = false;
             };
 
-            if (document.startViewTransition) {
+            if (typeof document.startViewTransition === 'function') {
                 try {
-                    await document.startViewTransition(doSwap).finished;
+                    document.startViewTransition(() => {
+                        performSwap();
+                    });
                 } catch (_) {
-                    doSwap();
+                    performSwap();
                 }
             } else {
-                doSwap();
+                performSwap();
             }
 
         } catch (err) {
+            finishProgress();
             if (err.name === 'AbortError') return;
             console.warn('SPA navigation fallback to standard load:', err);
             window.location.href = targetUrl;
@@ -257,6 +383,19 @@
         lastRenderedPath = currentPath;
         navigateToUrl(window.location.href, false);
     });
+
+    // Hover and Touch Prefetching for internal links
+    const handleLinkPrefetch = (e) => {
+        const anchor = e.target && e.target.closest ? e.target.closest('a') : null;
+        if (!anchor) return;
+        const href = anchor.getAttribute('href');
+        if (!href || href.startsWith('#') || anchor.hasAttribute('download') || anchor.getAttribute('target') === '_blank') return;
+        if (anchor.getAttribute('rel') === 'external' || anchor.getAttribute('data-no-router') !== null) return;
+        prefetchUrl(href);
+    };
+
+    document.addEventListener('pointerenter', handleLinkPrefetch, { passive: true, capture: true });
+    document.addEventListener('touchstart', handleLinkPrefetch, { passive: true, capture: true });
 
     // Global Link Interceptor for all internal links
     document.addEventListener('click', (e) => {
@@ -284,8 +423,8 @@
                 return;
             }
 
-            // Same pathname: let island handle query or hash changes without re-fetching
-            if (url.pathname === window.location.pathname) {
+            // Same pathname & search: let island handle query or hash changes without re-fetching
+            if (url.pathname === window.location.pathname && url.search === window.location.search) {
                 return;
             }
 
@@ -294,12 +433,18 @@
         } catch (_) {}
     });
 
-    // Sync active nav links on initial DOM ready
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            updateActiveNavLinks(window.location.pathname);
-        });
-    } else {
+    // Seed current page into cache and sync active nav links on DOM ready
+    const initPage = () => {
         updateActiveNavLinks(window.location.pathname);
+        setCachedPage(window.location.pathname + window.location.search, {
+            finalUrl: window.location.href,
+            html: document.documentElement.outerHTML
+        });
+    };
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initPage);
+    } else {
+        initPage();
     }
 })();

@@ -1033,7 +1033,8 @@ function trackGAEvent(eventName, eventParams = {}, req = null) {
                         body: JSON.stringify(payload),
                         headers: {
                             'Content-Type': 'application/json'
-                        }
+                        },
+                        timeout: 1
                     });
                 }
             } catch (err) {
@@ -2599,17 +2600,74 @@ function formatClimbSummary(cl, mediaList = []) {
         lng: clLng,
         hasCoords: typeof clLat === "number" && typeof clLng === "number" && (clLat !== 0 || clLng !== 0),
         description: clDesc,
-        descriptionHtml: renderMarkdown(clDesc),
+        descriptionHtml: clDesc ? renderMarkdown(clDesc) : "",
         location: clLoc,
-        locationHtml: renderMarkdown(clLoc, { inline: true }),
+        locationHtml: clLoc ? renderMarkdown(clLoc, { inline: true }) : "",
         protection: clProt,
-        protectionHtml: renderMarkdown(clProt, { inline: true }),
+        protectionHtml: clProt ? renderMarkdown(clProt, { inline: true }) : "",
         createdByUser: cl.getString("createdByUser") || "",
         updatedByUser: cl.getString("updatedByUser") || "",
         subAreaName: clSubAreaName && clSubAreaName !== name ? clSubAreaName : "",
         subAreaUrl: clAreaId && clSubAreaName ? buildAreaUrl(clAreaId, clSubAreaName) : "",
         media: mediaList
     };
+}
+
+const _areaDetailViewCache = new Map();
+const AREA_VIEW_CACHE_TTL_MS = 120 * 1000;
+
+const _climbDetailViewCache = new Map();
+const CLIMB_VIEW_CACHE_TTL_MS = 120 * 1000;
+
+function applyClimbMetadata(metadata, viewData) {
+    if (!metadata || !viewData || !viewData.climb) return;
+    const { climb, parentArea, canonicalPath } = viewData;
+    const gradeSuffix = climb.primaryGrade ? ` (${climb.primaryGrade})` : "";
+    const areaSuffix = parentArea ? ` — ${parentArea.name}` : "";
+    const pageTitle = `${climb.name}${gradeSuffix}${areaSuffix} | Wiki Bloc`;
+    const descPieces = [];
+    if (climb.primaryGrade) descPieces.push(climb.primaryGrade);
+    if (climb.disciplines && climb.disciplines.length > 0) descPieces.push(climb.disciplines.join(", "));
+    if (parentArea) descPieces.push(`in ${parentArea.name}`);
+    const pageDesc = climb.description
+        ? extractPreviewText(climb.description).slice(0, 160)
+        : `${climb.name}${descPieces.length ? " — " + descPieces.join(" • ") : ""} climbing route details, photos, and beta on Wiki Bloc.`;
+    const canonicalUrl = `${getBaseUrl()}${canonicalPath}`;
+
+    setOrUpdateMeta(metadata, "title", pageTitle);
+    setOrUpdateMeta(metadata, "og:title", pageTitle);
+    setOrUpdateMeta(metadata, "twitter:title", pageTitle);
+    setOrUpdateMeta(metadata, "description", pageDesc);
+    setOrUpdateMeta(metadata, "og:description", pageDesc);
+    setOrUpdateMeta(metadata, "twitter:description", pageDesc);
+    setOrUpdateMeta(metadata, "url", canonicalUrl);
+    setOrUpdateMeta(metadata, "og:url", canonicalUrl);
+    setOrUpdateMeta(metadata, "twitter:url", canonicalUrl);
+
+    if (climb.media && climb.media.length > 0 && climb.media[0].url) {
+        setOrUpdateMeta(metadata, "og:image", climb.media[0].url);
+        setOrUpdateMeta(metadata, "og:image:secure_url", climb.media[0].url);
+        setOrUpdateMeta(metadata, "twitter:image", climb.media[0].url);
+    }
+}
+
+function applyAreaMetadata(metadata, viewData) {
+    if (!metadata || !viewData) return;
+    const pageTitle = `${viewData.name} Climbing Guide | Wiki Bloc`;
+    const pageDesc = viewData.description
+        ? extractPreviewText(viewData.description).slice(0, 160)
+        : `Explore ${formatNumberWithCommas(viewData.totalClimbs)} rock climbing routes, boulders, and crags in ${viewData.name}.`;
+    const canonicalUrl = `${getBaseUrl()}${viewData.canonicalPath}`;
+
+    setOrUpdateMeta(metadata, "title", pageTitle);
+    setOrUpdateMeta(metadata, "og:title", pageTitle);
+    setOrUpdateMeta(metadata, "twitter:title", pageTitle);
+    setOrUpdateMeta(metadata, "description", pageDesc);
+    setOrUpdateMeta(metadata, "og:description", pageDesc);
+    setOrUpdateMeta(metadata, "twitter:description", pageDesc);
+    setOrUpdateMeta(metadata, "url", canonicalUrl);
+    setOrUpdateMeta(metadata, "og:url", canonicalUrl);
+    setOrUpdateMeta(metadata, "twitter:url", canonicalUrl);
 }
 
 /**
@@ -2649,7 +2707,15 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         lookupKey = seg1;
     }
 
+    const cachedEntry = _areaDetailViewCache.get(lookupKey);
+    if (cachedEntry && (Date.now() - cachedEntry.time < AREA_VIEW_CACHE_TTL_MS)) {
+        applyAreaMetadata(data?.metadata, cachedEntry.data);
+        return cachedEntry.data;
+    }
+
+    const _t0 = Date.now();
     let { areaRecord, childAreas, climbs, isDescendantClimbs } = getOrSyncAreaDetail(lookupKey);
+    const _t1 = Date.now();
 
     // Fallback: if single-segment /area/:slug was visited, resolve by slug match
     if (!areaRecord && seg1 && !seg2 && !uuidRegex.test(seg1)) {
@@ -2667,6 +2733,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             isDescendantClimbs = detail.isDescendantClimbs;
         }
     }
+    const _t2 = Date.now();
 
     if (!areaRecord) return null;
 
@@ -2728,9 +2795,12 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
     const currentUserId = currentUser?.id || '';
     const imgurClientId = getImgurClientId();
 
+    const _t3 = Date.now();
     const climbIds = (climbs || []).map((cl) => cl.id).filter(Boolean);
     const mediaByClimbId = groupFormattedClimbMedia(getClimbMediaByClimbIds(climbIds), currentUserId);
+    const _t4 = Date.now();
     const formattedClimbs = (climbs || []).map((cl) => formatClimbSummary(cl, mediaByClimbId[cl.id] || []));
+    const _t5 = Date.now();
 
     if (reqObj && !shouldRedirect) {
         trackGAEvent("select_content", {
@@ -2738,6 +2808,17 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
             item_id: areaRecord.id,
             item_name: sanitizeSearchTerm(name)
         }, reqObj);
+    }
+    const _t6 = Date.now();
+
+    if (typeof $app !== "undefined" && $app.logger) {
+        $app.logger().info("prepareAreaDetailViewData timing",
+            "getOrSyncAreaDetail", (_t1 - _t0),
+            "mediaQuery", (_t4 - _t3),
+            "formatClimbs", (_t5 - _t4),
+            "trackGAEvent", (_t6 - _t5),
+            "total", (_t6 - _t0)
+        );
     }
 
     if (data?.metadata) {
@@ -2758,7 +2839,7 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         setOrUpdateMeta(data.metadata, "twitter:url", canonicalUrl);
     }
 
-    return {
+    const result = {
         id: areaRecord.id,
         uuid,
         name,
@@ -2785,6 +2866,17 @@ function prepareAreaDetailViewData(params = {}, reqObj = null, data = null) {
         isImgurConfigured: Boolean(imgurClientId),
         imgurClientId: currentUser ? imgurClientId : ''
     };
+
+    if (_areaDetailViewCache.size > 200) {
+        const firstKey = _areaDetailViewCache.keys().next().value;
+        _areaDetailViewCache.delete(firstKey);
+    }
+    _areaDetailViewCache.set(lookupKey, { time: Date.now(), data: result });
+    if (areaRecord.id !== lookupKey) {
+        _areaDetailViewCache.set(areaRecord.id, { time: Date.now(), data: result });
+    }
+
+    return result;
 }
 
 /**
@@ -2818,6 +2910,12 @@ function prepareClimbDetailViewData(params = {}, reqObj = null, data = null) {
         lookupKey = seg2;
     } else {
         lookupKey = seg1;
+    }
+
+    const cachedEntry = _climbDetailViewCache.get(lookupKey);
+    if (cachedEntry && (Date.now() - cachedEntry.time < CLIMB_VIEW_CACHE_TTL_MS)) {
+        applyClimbMetadata(data?.metadata, cachedEntry.data);
+        return cachedEntry.data;
     }
 
     let detail = getOrSyncClimbDetail(lookupKey);
@@ -2953,7 +3051,7 @@ function prepareClimbDetailViewData(params = {}, reqObj = null, data = null) {
         }
     }
 
-    return {
+    const result = {
         climb,
         parentArea,
         breadcrumbs,
@@ -2967,6 +3065,17 @@ function prepareClimbDetailViewData(params = {}, reqObj = null, data = null) {
         isImgurConfigured: Boolean(imgurClientId),
         imgurClientId: currentUser ? imgurClientId : ''
     };
+
+    if (_climbDetailViewCache.size > 300) {
+        const firstKey = _climbDetailViewCache.keys().next().value;
+        _climbDetailViewCache.delete(firstKey);
+    }
+    _climbDetailViewCache.set(lookupKey, { time: Date.now(), data: result });
+    if (climbRecord.id !== lookupKey) {
+        _climbDetailViewCache.set(climbRecord.id, { time: Date.now(), data: result });
+    }
+
+    return result;
 }
 
 module.exports = {
