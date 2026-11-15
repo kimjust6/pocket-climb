@@ -184,6 +184,13 @@
             img.decoding = 'async';
             img.referrerPolicy = 'no-referrer';
             img.className = 'w-full h-full object-cover my-0 group-hover:scale-105 transition-transform duration-200';
+            if (photo.fallbackUrl && photo.fallbackUrl !== photo.url) {
+                img.onerror = function () {
+                    if (this.src !== photo.fallbackUrl) {
+                        this.src = photo.fallbackUrl;
+                    }
+                };
+            }
             btn.appendChild(img);
 
             if (maxThumbnails > 0 && idx === maxThumbnails - 1 && mediaList.length > maxThumbnails) {
@@ -218,7 +225,16 @@
 
         lightboxImg.src = photo.url;
         lightboxImg.alt = 'Photo of ' + (entry.name || 'climb');
-        lightboxOriginal.href = photo.url;
+        if (photo.fallbackUrl && photo.fallbackUrl !== photo.url) {
+            lightboxImg.onerror = function () {
+                if (this.src !== photo.fallbackUrl) {
+                    this.src = photo.fallbackUrl;
+                }
+            };
+        } else {
+            lightboxImg.onerror = null;
+        }
+        lightboxOriginal.href = photo.originalUrl || photo.fallbackUrl || photo.url;
         lightboxCounter.textContent = (activeLightboxIndex + 1) + ' / ' + list.length;
 
         const hasMultiple = list.length > 1;

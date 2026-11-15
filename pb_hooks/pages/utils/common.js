@@ -617,6 +617,20 @@ function formatClimbMediaItem(record, currentUserId = '') {
     const url = resolveClimbMediaUrl(rawUrl);
     if (!url) return null;
 
+    const rawOriginal = typeof record.getString === 'function' ? record.getString('originalUrl') : (record.originalUrl || '');
+    let fallbackUrl = resolveClimbMediaUrl(rawOriginal);
+    if (!fallbackUrl && record.entityTags) {
+        try {
+            const tags = typeof record.entityTags === 'string' ? JSON.parse(record.entityTags) : record.entityTags;
+            if (tags && typeof tags === 'object' && !Array.isArray(tags) && tags.originalUrl) {
+                fallbackUrl = resolveClimbMediaUrl(tags.originalUrl);
+            }
+        } catch (_) {}
+    }
+    if (!fallbackUrl) {
+        fallbackUrl = url;
+    }
+
     const getStr = (field) => (typeof record.getString === 'function' ? record.getString(field) : (record[field] || ''));
     const getIntVal = (field) => (typeof record.getInt === 'function' ? record.getInt(field) : (parseInt(record[field], 10) || 0));
 
@@ -627,6 +641,8 @@ function formatClimbMediaItem(record, currentUserId = '') {
     return {
         id: record.id,
         url,
+        fallbackUrl,
+        originalUrl: fallbackUrl,
         width: getIntVal('width'),
         height: getIntVal('height'),
         format: getStr('format'),
@@ -1948,6 +1964,155 @@ function prepareSiteAndHeroViewData() {
 }
 
 /**
+ * Search climbs, crags / sub-areas, and location records for directory search
+ * @param {string} rawQuery
+ * @param {string} countryFilter
+ * @returns {object} { crags, climbs, totalCrags, totalClimbs }
+ */
+function searchDirectoryItems(rawQuery, countryFilter = "ALL") {
+    const cleanQuery = sanitizeSearchTerm(rawQuery || "");
+    if (!cleanQuery) {
+        return {
+            crags: [],
+            climbs: [],
+            totalCrags: 0,
+            totalClimbs: 0
+        };
+    }
+
+    const {
+        getHomepageDirectoryAreas,
+        getAreas,
+        getClimbs
+    } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    const normalizedCountry = (countryFilter || "ALL").toUpperCase();
+    let targetCountryName = "";
+    if (normalizedCountry !== "ALL") {
+        const countryMap = {
+            CAN: "Canada",
+            USA: "USA",
+            ZAF: "South Africa",
+            DEU: "Germany",
+            FRA: "France",
+            ESP: "Spain",
+            AUS: "Australia",
+            ITA: "Italy",
+            CHE: "Switzerland",
+            MEX: "Mexico",
+            NZL: "New Zealand",
+            THA: "Thailand",
+            GRC: "Greece"
+        };
+        targetCountryName = countryMap[normalizedCountry] || normalizedCountry;
+    }
+
+    // Exclude top-level directory root nodes (countries and US states) so they only show in Locations
+    let shownUuids = new Set();
+    try {
+        const directoryRecords = getHomepageDirectoryAreas();
+        shownUuids = new Set(directoryRecords.map((r) => r.getString("openbetaUuid")));
+    } catch (_) {}
+
+    // Search Crags / Sub-areas
+    const areasResult = getAreas(1, 40, cleanQuery);
+    const crags = (areasResult.items || [])
+        .filter((r) => {
+            const obUuid = r.getString("openbetaUuid");
+            return !shownUuids.has(obUuid);
+        })
+        .map((r) => {
+            const name = r.getString("name");
+            const tc = r.getInt("totalClimbs") || 0;
+            let pathTokens = [];
+            try {
+                const rawPt = r.getString("pathTokens") || r.get("pathTokens");
+                pathTokens = Array.isArray(rawPt)
+                    ? rawPt
+                    : typeof rawPt === "string" && rawPt.startsWith("[")
+                        ? JSON.parse(rawPt)
+                        : [];
+            } catch (_) {}
+
+            const pathSummary = pathTokens.length > 1
+                ? pathTokens.slice(0, -1).join(" › ")
+                : (pathTokens[0] || "");
+
+            return {
+                id: r.id,
+                name,
+                totalClimbs: tc,
+                formattedClimbs: formatNumberWithCommas(tc),
+                pathTokens,
+                pathSummary,
+                url: buildAreaUrl(r.id, name)
+            };
+        })
+        .filter((crag) => {
+            if (!targetCountryName) return true;
+            return (
+                crag.pathTokens.some((tok) => tok.toLowerCase().includes(targetCountryName.toLowerCase())) ||
+                crag.pathSummary.toLowerCase().includes(targetCountryName.toLowerCase())
+            );
+        })
+        .sort((a, b) => {
+            const aNameMatch = a.name.toLowerCase().includes(cleanQuery.toLowerCase());
+            const bNameMatch = b.name.toLowerCase().includes(cleanQuery.toLowerCase());
+            if (aNameMatch && !bNameMatch) return -1;
+            if (!aNameMatch && bNameMatch) return 1;
+            return (b.totalClimbs || 0) - (a.totalClimbs || 0);
+        });
+
+    // Search Climbs
+    const climbsResult = getClimbs(1, 50, cleanQuery);
+    const climbs = (climbsResult.items || [])
+        .map((cl) => {
+            const name = cl.getString("name");
+            const { primaryGrade } = buildGradeDetails(cl);
+            const clPathTokens = parseJsonArrayField(cl, "pathTokens");
+            const disciplines = parseJsonArrayField(cl, "disciplines");
+            const areaId = cl.getString("area") || cl.getString("areaUuid") || "";
+            const areaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "Area";
+            const pathSummary = clPathTokens.length > 1
+                ? clPathTokens.slice(0, -1).join(" › ")
+                : (clPathTokens[0] || "");
+
+            return {
+                id: cl.id,
+                name,
+                grade: primaryGrade,
+                disciplines,
+                pathTokens: clPathTokens,
+                pathSummary,
+                areaName,
+                areaUrl: areaId ? buildAreaUrl(areaId, areaName) : "/",
+                url: buildClimbUrl(cl.id, name)
+            };
+        })
+        .filter((climb) => {
+            if (!targetCountryName) return true;
+            return (
+                climb.pathTokens.some((tok) => tok.toLowerCase().includes(targetCountryName.toLowerCase())) ||
+                climb.pathSummary.toLowerCase().includes(targetCountryName.toLowerCase())
+            );
+        })
+        .sort((a, b) => {
+            const aNameMatch = a.name.toLowerCase().includes(cleanQuery.toLowerCase());
+            const bNameMatch = b.name.toLowerCase().includes(cleanQuery.toLowerCase());
+            if (aNameMatch && !bNameMatch) return -1;
+            if (!aNameMatch && bNameMatch) return 1;
+            return 0;
+        });
+
+    return {
+        crags,
+        climbs,
+        totalCrags: crags.length,
+        totalClimbs: climbs.length
+    };
+}
+
+/**
  * Prepare homepage Countries & Climbing Locations directory view model from PocketBase DB
  * @param {object} params
  * @param {object} reqObj
@@ -1968,10 +2133,10 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
     const countryFilter = typeof params?.country === "string" ? params.country.trim().toUpperCase() : "";
 
     if (cleanQuery && reqObj) {
-        trackGAEvent(reqObj, "view_search_results", {
+        trackGAEvent("view_search_results", {
             search_term: cleanQuery,
             search_category: "climbing_locations"
-        });
+        }, reqObj);
     }
 
     const directoryRecords = getHomepageDirectoryAreas();
@@ -2182,54 +2347,13 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
     // Query database catalog counts directly from PocketBase SQLite tables
     const dbStats = getDatabaseCatalogStats(usaUuid);
 
-    // If user entered a search query, also search deep areas/crags and climbs in the DB
+    // If user entered a search query, search deep areas/crags and climbs in the DB
     let matchingSubAreas = [];
     let matchingClimbs = [];
     if (rawQuery) {
-        const areasResult = getAreas(1, 24, rawQuery);
-        const shownUuids = new Set(areaItems.map((a) => a.uuid));
-        matchingSubAreas = (areasResult.items || [])
-            .filter((r) => !shownUuids.has(r.getString("openbetaUuid")))
-            .map((r) => {
-                const name = r.getString("name");
-                const tc = r.getInt("totalClimbs") || 0;
-                let pathTokens = [];
-                try {
-                    const rawPt = r.getString("pathTokens") || r.get("pathTokens");
-                    pathTokens = Array.isArray(rawPt)
-                        ? rawPt
-                        : typeof rawPt === "string" && rawPt.startsWith("[")
-                            ? JSON.parse(rawPt)
-                            : [];
-                } catch (_) {}
-                return {
-                    id: r.id,
-                    name,
-                    totalClimbs: tc,
-                    formattedClimbs: formatNumberWithCommas(tc),
-                    pathSummary: pathTokens.slice(0, -1).join(" › "),
-                    url: buildAreaUrl(r.id, name)
-                };
-            });
-
-        const climbsResult = getClimbs(1, 24, rawQuery);
-        matchingClimbs = (climbsResult.items || []).map((cl) => {
-            const name = cl.getString("name");
-            const { primaryGrade } = buildGradeDetails(cl);
-            const clPathTokens = parseJsonArrayField(cl, "pathTokens");
-            const disciplines = parseJsonArrayField(cl, "disciplines");
-            const areaId = cl.getString("area") || cl.getString("areaUuid") || "";
-            const areaName = clPathTokens.length > 0 ? clPathTokens[clPathTokens.length - 1] : "Area";
-            return {
-                id: cl.id,
-                name,
-                grade: primaryGrade,
-                disciplines,
-                pathSummary: clPathTokens.join(" › "),
-                url: buildClimbUrl(cl.id, name),
-                areaUrl: areaId ? buildAreaUrl(areaId, areaName) : "/"
-            };
-        });
+        const searchResults = searchDirectoryItems(rawQuery, countryFilter);
+        matchingSubAreas = searchResults.crags;
+        matchingClimbs = searchResults.climbs;
     }
 
     return {
@@ -3130,6 +3254,7 @@ module.exports = {
     formatNumberWithCommas,
     buildAreaUrl,
     buildClimbUrl,
+    searchDirectoryItems,
     prepareSiteAndHeroViewData,
     prepareHomepageDirectoryViewData,
     prepareAreaDetailViewData,

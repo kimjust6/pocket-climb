@@ -421,6 +421,7 @@ async function main() {
     const climbMediaFields = [
         { name: 'openbetaId', type: 'text', required: false },
         { name: 'mediaUrl', type: 'text', required: true, presentable: true },
+        { name: 'originalUrl', type: 'text', required: false },
         {
             name: 'file',
             type: 'file',

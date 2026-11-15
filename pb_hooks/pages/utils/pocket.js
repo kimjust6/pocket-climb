@@ -1189,6 +1189,13 @@ function upsertOpenBetaMediaRecord(mediaObj, { areaId = "", climbId = "" } = {},
 
         record.set("openbetaId", String(mediaObj.id || ""));
         record.set("mediaUrl", String(mediaObj.mediaUrl));
+        if (mediaObj.originalUrl) {
+            record.set("originalUrl", String(mediaObj.originalUrl));
+        } else if (!record.getString("originalUrl") && mediaObj.mediaUrl) {
+            const raw = String(mediaObj.mediaUrl);
+            const orig = raw.startsWith("http") ? raw : (raw.startsWith("/") ? `https://media.openbeta.io${raw}` : `https://media.openbeta.io/${raw}`);
+            record.set("originalUrl", orig);
+        }
         if (areaId) record.set("area", areaId);
         if (climbId) record.set("climb", climbId);
         if (typeof mediaObj.width === "number") record.set("width", mediaObj.width);

@@ -494,3 +494,48 @@ function handleDeleteClimbMediaRequest(e) {
 
 routerAdd("DELETE", "/api/climbs/{climbId}/media/{mediaId}", handleDeleteClimbMediaRequest);
 routerAdd("POST", "/api/climbs/{climbId}/media/{mediaId}/delete", handleDeleteClimbMediaRequest);
+
+/**
+ * Directory Search API Endpoint
+ * GET /api/search?q={query}&country={country}
+ * Returns matching crags (areas) and climbs with privacy-compliant analytics
+ */
+routerAdd("GET", "/api/search", (e) => {
+    const {
+        searchDirectoryItems,
+        sanitizeSearchTerm,
+        trackGAEvent,
+    } = require(`${__hooks}/pages/utils/common.js`);
+
+    let query = {};
+    try {
+        const info = e.requestInfo();
+        query = info?.query || {};
+    } catch (_) {}
+
+    const rawQ = String(query.q || query.query || "").trim();
+    const cleanQ = sanitizeSearchTerm(rawQ);
+    const country = String(query.country || "ALL").trim().toUpperCase();
+
+    if (cleanQ && e.request) {
+        try {
+            trackGAEvent("view_search_results", {
+                search_term: cleanQ,
+                search_category: "climbing_locations",
+            }, e.request);
+        } catch (_) {}
+    }
+
+    const results = searchDirectoryItems(cleanQ, country);
+
+    return e.json(200, {
+        ok: true,
+        query: cleanQ,
+        country: country || "ALL",
+        crags: results.crags || [],
+        climbs: results.climbs || [],
+        totalCrags: results.totalCrags || 0,
+        totalClimbs: results.totalClimbs || 0,
+    });
+});
+

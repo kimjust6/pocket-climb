@@ -9,6 +9,8 @@
 <%- JSON.stringify({
     allInternational: directoryView.allInternationalCountries || [],
     allUsa: directoryView.allUsa || null,
+    matchingSubAreas: directoryView.matchingSubAreas || [],
+    matchingClimbs: directoryView.matchingClimbs || [],
     quickNavLinks: directoryView.quickNavLinks || [],
     stats: directoryView.stats || {},
     initialCountry: directoryView.countryFilter || 'ALL',
@@ -34,8 +36,15 @@
         setup() {
             const allInternational = ref(rawData.allInternational || []);
             const allUsa = ref(rawData.allUsa || null);
+            const matchingCrags = ref(rawData.matchingSubAreas || []);
+            const matchingClimbs = ref(rawData.matchingClimbs || []);
             const quickNavLinks = ref(rawData.quickNavLinks || []);
             const stats = ref(rawData.stats || {});
+            const activeTab = ref('all'); // 'all' | 'climbs' | 'crags' | 'locations'
+            const isSearching = ref(false);
+
+            let searchDebounceTimer = null;
+            let currentSearchAbort = null;
 
             // Read initial country from URL search params or embedded data
             let initialCountry = 'ALL';
@@ -80,25 +89,91 @@
                 } catch (_) {}
             }
 
+            async function fetchSearchResults(query, country) {
+                const q = (query || '').trim();
+                if (!q) {
+                    matchingCrags.value = [];
+                    matchingClimbs.value = [];
+                    isSearching.value = false;
+                    return;
+                }
+
+                if (currentSearchAbort) {
+                    currentSearchAbort.abort();
+                }
+                currentSearchAbort = new AbortController();
+
+                isSearching.value = true;
+                try {
+                    const c = (country || 'ALL').toUpperCase();
+                    const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&country=${encodeURIComponent(c)}`, {
+                        signal: currentSearchAbort.signal
+                    });
+                    if (res.ok) {
+                        const data = await res.json();
+                        matchingCrags.value = data.crags || [];
+                        matchingClimbs.value = data.climbs || [];
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') {
+                        console.warn('Search request failed:', err);
+                    }
+                } finally {
+                    isSearching.value = false;
+                }
+            }
+
+            function onSearchInput() {
+                clearTimeout(searchDebounceTimer);
+                updateUrl();
+                const q = (searchQuery.value || '').trim();
+                if (!q) {
+                    matchingCrags.value = [];
+                    matchingClimbs.value = [];
+                    return;
+                }
+                searchDebounceTimer = setTimeout(() => {
+                    fetchSearchResults(q, countryFilter.value);
+                }, 250);
+            }
+
+            function handleSearch() {
+                clearTimeout(searchDebounceTimer);
+                updateUrl();
+                const q = (searchQuery.value || '').trim();
+                if (q) {
+                    fetchSearchResults(q, countryFilter.value);
+                } else {
+                    matchingCrags.value = [];
+                    matchingClimbs.value = [];
+                }
+            }
+
             function selectCountry(code) {
                 const normalized = (code || 'ALL').toUpperCase();
                 if (countryFilter.value === normalized) return;
                 countryFilter.value = normalized;
                 updateUrl();
-            }
-
-            function handleSearch() {
-                updateUrl();
+                const q = (searchQuery.value || '').trim();
+                if (q) {
+                    fetchSearchResults(q, normalized);
+                }
             }
 
             function clearSearch() {
                 searchQuery.value = '';
+                matchingCrags.value = [];
+                matchingClimbs.value = [];
+                activeTab.value = 'all';
                 updateUrl();
             }
 
             function resetFilters() {
                 countryFilter.value = 'ALL';
                 searchQuery.value = '';
+                matchingCrags.value = [];
+                matchingClimbs.value = [];
+                activeTab.value = 'all';
                 updateUrl();
             }
 
@@ -110,6 +185,12 @@
                     const q = params.get('query') || '';
                     countryFilter.value = c.toUpperCase();
                     searchQuery.value = q;
+                    if (q.trim()) {
+                        fetchSearchResults(q, c);
+                    } else {
+                        matchingCrags.value = [];
+                        matchingClimbs.value = [];
+                    }
                 } catch (_) {}
             });
 
@@ -188,10 +269,39 @@
                 };
             });
 
+            const locationResultsCount = computed(() => {
+                let count = 0;
+                if (displayedInternational.value) {
+                    displayedInternational.value.forEach(c => {
+                        count += 1 + (c.locations ? c.locations.length : 0);
+                    });
+                }
+                if (displayedUsa.value && displayedUsa.value.states) {
+                    displayedUsa.value.states.forEach(s => {
+                        count += 1 + (s.destinations ? s.destinations.length : 0);
+                    });
+                }
+                return count;
+            });
+
+            const totalResultsCount = computed(() => {
+                return locationResultsCount.value + matchingCrags.value.length + matchingClimbs.value.length;
+            });
+
             const hasResults = computed(() => {
-                const hasIntl = displayedInternational.value && displayedInternational.value.length > 0;
-                const hasUs = displayedUsa.value && displayedUsa.value.states && displayedUsa.value.states.length > 0;
-                return hasIntl || hasUs;
+                const q = (searchQuery.value || '').trim();
+                if (!q) {
+                    const hasIntl = displayedInternational.value && displayedInternational.value.length > 0;
+                    const hasUs = displayedUsa.value && displayedUsa.value.states && displayedUsa.value.states.length > 0;
+                    return hasIntl || hasUs;
+                }
+                return totalResultsCount.value > 0;
+            });
+
+            onMounted(() => {
+                if (initialQuery.trim() && matchingCrags.value.length === 0 && matchingClimbs.value.length === 0) {
+                    fetchSearchResults(initialQuery, countryFilter.value);
+                }
             });
 
             return {
@@ -199,10 +309,17 @@
                 searchQuery,
                 quickNavLinks,
                 stats,
+                activeTab,
+                isSearching,
+                matchingCrags,
+                matchingClimbs,
                 displayedInternational,
                 displayedUsa,
+                locationResultsCount,
+                totalResultsCount,
                 hasResults,
                 selectCountry,
+                onSearchInput,
                 handleSearch,
                 clearSearch,
                 resetFilters
@@ -248,22 +365,25 @@
                     <% }); %>
                 </div>
 
-                <!-- Search Countries, States & Climbing Destinations -->
+                <!-- Search Countries, States, Crags & Climbs -->
                 <form role="search" action="/" method="get" @submit.prevent="handleSearch" class="w-full lg:w-96">
                     <div class="relative w-full">
-                        <label for="location-search-input" class="sr-only">Search countries, states, and climbing locations</label>
+                        <label for="location-search-input" class="sr-only">Search countries, states, crags, and climbs</label>
                         <input type="text" inputmode="search" role="searchbox" name="query" id="location-search-input"
                             v-model="searchQuery"
+                            @input="onSearchInput"
                             class="input input-bordered input-sm sm:input-md w-full rounded-full bg-base-100 border border-base-content/30 pl-4 pr-20 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                            placeholder="Filter countries, states, or crags..."
+                            placeholder="Filter countries, states, crags, or climbs..."
                             @keydown.enter.prevent="handleSearch" />
                         <div class="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                            <!-- Loading indicator -->
+                            <span v-if="isSearching" class="loading loading-spinner loading-xs text-primary mr-1" aria-hidden="true"></span>
                             <button v-show="searchQuery" @click="clearSearch" type="button"
                                 class="btn btn-ghost btn-xs btn-circle text-base-content/70 hover:text-base-content"
                                 aria-label="Clear filter">
                                 ✕
                             </button>
-                            <button type="submit" class="btn btn-primary btn-xs sm:btn-sm btn-circle" aria-label="Search locations">
+                            <button type="submit" class="btn btn-primary btn-xs sm:btn-sm btn-circle" aria-label="Search">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                                 </svg>
@@ -297,100 +417,258 @@
 
         <!-- DYNAMIC DIRECTORY CONTENT (Bottom Component Reloaded Reactively) -->
         <div id="directory-content-section">
-            <div v-if="!hasResults" class="mx-auto max-w-xl py-16 text-center">
-                <h2 class="mb-4 text-3xl font-bold text-accent">No climbing locations found</h2>
+
+            <!-- Active Search Filter Summary & Category Tabs -->
+            <div v-if="searchQuery.trim()" class="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-base-200/60 border border-base-content/10">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <span class="text-sm font-semibold text-base-content">
+                        Results for <span class="text-accent font-bold">"{{ searchQuery.trim() }}"</span>
+                    </span>
+                    <span v-if="countryFilter !== 'ALL'" class="badge badge-sm badge-secondary font-medium">
+                        in {{ countryFilter }}
+                    </span>
+                    <span class="text-xs text-base-content/60">
+                        ({{ totalResultsCount }} total matches)
+                    </span>
+                </div>
+                <!-- Category Filter Tabs: All, Climbs, Crags, Locations -->
+                <div class="join shrink-0">
+                    <button type="button" @click="activeTab = 'all'"
+                        class="btn btn-xs join-item"
+                        :class="activeTab === 'all' ? 'btn-primary' : 'btn-ghost'">
+                        All ({{ totalResultsCount }})
+                    </button>
+                    <button type="button" @click="activeTab = 'climbs'"
+                        class="btn btn-xs join-item"
+                        :class="activeTab === 'climbs' ? 'btn-primary' : 'btn-ghost'">
+                        Climbs ({{ matchingClimbs.length }})
+                    </button>
+                    <button type="button" @click="activeTab = 'crags'"
+                        class="btn btn-xs join-item"
+                        :class="activeTab === 'crags' ? 'btn-primary' : 'btn-ghost'">
+                        Crags ({{ matchingCrags.length }})
+                    </button>
+                    <button type="button" @click="activeTab = 'locations'"
+                        class="btn btn-xs join-item"
+                        :class="activeTab === 'locations' ? 'btn-primary' : 'btn-ghost'">
+                        Locations ({{ locationResultsCount }})
+                    </button>
+                </div>
+            </div>
+
+            <!-- Empty State -->
+            <div v-if="!hasResults && !isSearching" class="mx-auto max-w-xl py-16 text-center">
+                <h2 class="mb-4 text-3xl font-bold text-accent">No results found</h2>
                 <p class="mb-6 text-base text-base-content/80">
-                    No countries, states, or climbing destinations matched your filter.
+                    No climbs, crags, or locations matched your search.
                 </p>
                 <button type="button" @click="resetFilters" class="btn btn-primary btn-sm rounded-xl">
                     Show All Locations
                 </button>
             </div>
 
-            <!-- INTERNATIONAL SECTION -->
-            <section v-if="displayedInternational.length > 0" class="block w-full mb-16" aria-labelledby="heading-international">
-                <div class="flex items-end justify-between mb-2">
-                    <h2 id="heading-international" class="text-2xl sm:text-3xl font-bold text-base-content tracking-tight">
-                        International
-                    </h2>
-                    <span class="text-xs text-base-content/60 font-medium">
-                        {{ displayedInternational.length }} {{ displayedInternational.length === 1 ? 'country' : 'countries' }}
-                    </span>
-                </div>
-                <hr class="mb-6 border-t-2 border-base-content" />
-
-                <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
-                    <div v-for="country in displayedInternational" :key="country.id" class="mb-8 break-inside-avoid-column break-inside-avoid">
-                        <a :href="country.url"
-                            class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
-                            <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
-                                {{ country.name }}
-                            </span>
-                            <span class="text-xs text-base-content/70 font-mono">
-                                {{ country.formattedClimbs }}
-                            </span>
-                        </a>
-                        <hr class="my-1.5 border-t border-base-content/40" />
-                        <div v-if="country.locations && country.locations.length > 0" class="flex flex-col gap-1 mt-1.5">
-                            <a v-for="loc in country.locations" :key="loc.id" :href="loc.url"
-                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
-                                <span class="truncate pr-2">{{ loc.name }}</span>
-                                <span v-if="loc.totalClimbs > 0" class="text-[11px] text-base-content/50 font-mono shrink-0">
-                                    {{ loc.formattedClimbs }}
-                                </span>
-                            </a>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-            <!-- USA SECTION -->
-            <section v-if="displayedUsa && displayedUsa.states && displayedUsa.states.length > 0" class="block w-full" aria-labelledby="heading-usa">
-                <div class="flex items-end justify-between mb-2">
-                    <a :href="displayedUsa.url"
-                        class="flex flex-row items-center gap-2 no-underline group">
-                        <h2 id="heading-usa" class="text-2xl sm:text-3xl font-bold text-base-content group-hover:text-accent transition-colors tracking-tight">
-                            USA
-                        </h2>
-                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
-                            class="w-5 h-5 text-base-content/70 group-hover:text-accent group-hover:translate-x-0.5 transition-all">
-                            <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clip-rule="evenodd" />
+            <!-- 1. CRAGS & CLIMBING AREAS SECTION -->
+            <section v-if="matchingCrags.length > 0 && (activeTab === 'all' || activeTab === 'crags')" class="block w-full mb-12" aria-labelledby="heading-crags">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                         </svg>
-                    </a>
-                    <span class="text-xs text-base-content/70 font-mono">
-                        {{ displayedUsa.formattedClimbs }} climbs
+                        <h2 id="heading-crags" class="text-xl sm:text-2xl font-bold text-base-content tracking-tight">
+                            Crags & Climbing Areas
+                        </h2>
+                    </div>
+                    <span class="badge badge-secondary badge-outline text-xs font-semibold">
+                        {{ matchingCrags.length }} {{ matchingCrags.length === 1 ? 'crag' : 'crags' }}
                     </span>
                 </div>
-                <hr class="mb-6 border-t-2 border-base-content" />
+                <hr class="mb-4 border-t-2 border-base-content" />
 
-                <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
-                    <div v-for="state in displayedUsa.states" :key="state.id" class="mb-8 break-inside-avoid-column break-inside-avoid">
-                        <a :href="state.url"
-                            class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
-                            <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
-                                {{ state.name }}
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <a v-for="crag in matchingCrags" :key="crag.id" :href="crag.url"
+                        class="card bg-base-200/50 hover:bg-base-200 border border-base-content/10 hover:border-accent/40 rounded-xl p-3.5 transition-all duration-200 no-underline group shadow-sm hover:shadow-md">
+                        <div class="flex items-start justify-between gap-2">
+                            <span class="font-semibold text-sm text-base-content group-hover:text-accent transition-colors line-clamp-1">
+                                {{ crag.name }}
                             </span>
-                            <span class="text-xs text-base-content/70 font-mono">
-                                {{ state.formattedClimbs }}
+                            <span v-if="crag.totalClimbs > 0" class="badge badge-sm badge-secondary/20 text-secondary border-0 font-mono shrink-0">
+                                {{ crag.formattedClimbs }} climbs
                             </span>
-                        </a>
-                        <hr class="my-1.5 border-t border-base-content/40" />
-                        <div v-if="state.destinations && state.destinations.length > 0" class="flex flex-col gap-1 mt-1.5">
-                            <a v-for="dest in state.destinations" :key="dest.id" :href="dest.url"
-                                class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
-                                <span class="truncate pr-2">{{ dest.name }}</span>
-                                <span v-if="dest.totalClimbs > 0" class="text-[11px] text-base-content/50 font-mono shrink-0">
-                                    {{ dest.formattedClimbs }}
-                                </span>
-                            </a>
                         </div>
-                    </div>
+                        <div v-if="crag.pathSummary" class="flex items-center gap-1.5 mt-2 text-xs text-base-content/60">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"></path>
+                                <circle cx="12" cy="10" r="3"></circle>
+                            </svg>
+                            <span class="truncate">{{ crag.pathSummary }}</span>
+                        </div>
+                    </a>
                 </div>
             </section>
+
+            <!-- 2. CLIMBS & ROUTES SECTION -->
+            <section v-if="matchingClimbs.length > 0 && (activeTab === 'all' || activeTab === 'climbs')" class="block w-full mb-12" aria-labelledby="heading-climbs">
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <circle cx="12" cy="12" r="9" stroke-width="2" />
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v8m-4-4h8" />
+                        </svg>
+                        <h2 id="heading-climbs" class="text-xl sm:text-2xl font-bold text-base-content tracking-tight">
+                            Climbs & Routes
+                        </h2>
+                    </div>
+                    <span class="badge badge-accent badge-outline text-xs font-semibold">
+                        {{ matchingClimbs.length }} {{ matchingClimbs.length === 1 ? 'climb' : 'climbs' }}
+                    </span>
+                </div>
+                <hr class="mb-4 border-t-2 border-base-content" />
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                    <a v-for="climb in matchingClimbs" :key="climb.id" :href="climb.url"
+                        class="card bg-base-200/50 hover:bg-base-200 border border-base-content/10 hover:border-accent/40 rounded-xl p-3.5 transition-all duration-200 no-underline group shadow-sm hover:shadow-md">
+                        <div class="flex items-start justify-between gap-2">
+                            <span class="font-semibold text-sm text-base-content group-hover:text-accent transition-colors line-clamp-1">
+                                {{ climb.name }}
+                            </span>
+                            <span v-if="climb.grade" class="badge badge-accent badge-sm font-bold shrink-0">
+                                {{ climb.grade }}
+                            </span>
+                        </div>
+                        <div class="flex items-center justify-between gap-2 mt-2">
+                            <div v-if="climb.pathSummary || climb.areaName" class="flex items-center gap-1.5 text-xs text-base-content/60 min-w-0">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0 opacity-70" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M12 2a8 8 0 0 0-8 8c0 5.25 8 12 8 12s8-6.75 8-12a8 8 0 0 0-8-8z"></path>
+                                    <circle cx="12" cy="10" r="3"></circle>
+                                </svg>
+                                <span class="truncate">{{ climb.pathSummary || climb.areaName }}</span>
+                            </div>
+                            <div v-if="climb.disciplines && climb.disciplines.length > 0" class="flex items-center gap-1 shrink-0">
+                                <span v-for="d in climb.disciplines" :key="d" class="badge badge-ghost badge-xs text-[10px] capitalize">
+                                    {{ d }}
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+                </div>
+            </section>
+
+            <!-- 3. LOCATIONS SECTION (International & USA) -->
+            <div v-if="activeTab === 'all' || activeTab === 'locations'">
+                <!-- INTERNATIONAL SECTION -->
+                <section v-if="displayedInternational.length > 0" class="block w-full mb-16" aria-labelledby="heading-international">
+                    <div class="flex items-end justify-between mb-2">
+                        <h2 id="heading-international" class="text-2xl sm:text-3xl font-bold text-base-content tracking-tight">
+                            International
+                        </h2>
+                        <span class="text-xs text-base-content/60 font-medium">
+                            {{ displayedInternational.length }} {{ displayedInternational.length === 1 ? 'country' : 'countries' }}
+                        </span>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+
+                    <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
+                        <div v-for="country in displayedInternational" :key="country.id" class="mb-8 break-inside-avoid-column break-inside-avoid">
+                            <a :href="country.url"
+                                class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
+                                <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                    {{ country.name }}
+                                </span>
+                                <span class="text-xs text-base-content/70 font-mono">
+                                    {{ country.formattedClimbs }}
+                                </span>
+                            </a>
+                            <hr class="my-1.5 border-t border-base-content/40" />
+                            <div v-if="country.locations && country.locations.length > 0" class="flex flex-col gap-1 mt-1.5">
+                                <a v-for="loc in country.locations" :key="loc.id" :href="loc.url"
+                                    class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
+                                    <span class="truncate pr-2">{{ loc.name }}</span>
+                                    <span v-if="loc.totalClimbs > 0" class="text-[11px] text-base-content/50 font-mono shrink-0">
+                                        {{ loc.formattedClimbs }}
+                                    </span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- USA SECTION -->
+                <section v-if="displayedUsa && displayedUsa.states && displayedUsa.states.length > 0" class="block w-full" aria-labelledby="heading-usa">
+                    <div class="flex items-end justify-between mb-2">
+                        <a :href="displayedUsa.url"
+                            class="flex flex-row items-center gap-2 no-underline group">
+                            <h2 id="heading-usa" class="text-2xl sm:text-3xl font-bold text-base-content group-hover:text-accent transition-colors tracking-tight">
+                                USA
+                            </h2>
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"
+                                class="w-5 h-5 text-base-content/70 group-hover:text-accent group-hover:translate-x-0.5 transition-all">
+                                <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm4.28 10.28a.75.75 0 000-1.06l-3-3a.75.75 0 10-1.06 1.06l1.72 1.72H8.25a.75.75 0 000 1.5h5.69l-1.72 1.72a.75.75 0 101.06 1.06l3-3z" clip-rule="evenodd" />
+                            </svg>
+                        </a>
+                        <span class="text-xs text-base-content/70 font-mono">
+                            {{ displayedUsa.formattedClimbs }} climbs
+                        </span>
+                    </div>
+                    <hr class="mb-6 border-t-2 border-base-content" />
+
+                    <div class="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-x-10">
+                        <div v-for="state in displayedUsa.states" :key="state.id" class="mb-8 break-inside-avoid-column break-inside-avoid">
+                            <a :href="state.url"
+                                class="flex items-end justify-between group no-underline hover:text-accent transition-colors">
+                                <span class="font-semibold text-base text-secondary group-hover:text-accent transition-colors">
+                                    {{ state.name }}
+                                </span>
+                                <span class="text-xs text-base-content/70 font-mono">
+                                    {{ state.formattedClimbs }}
+                                </span>
+                            </a>
+                            <hr class="my-1.5 border-t border-base-content/40" />
+                            <div v-if="state.destinations && state.destinations.length > 0" class="flex flex-col gap-1 mt-1.5">
+                                <a v-for="dest in state.destinations" :key="dest.id" :href="dest.url"
+                                    class="text-xs text-base-content/90 hover:text-accent hover:underline no-underline flex items-center justify-between py-0.5 transition-colors">
+                                    <span class="truncate pr-2">{{ dest.name }}</span>
+                                    <span v-if="dest.totalClimbs > 0" class="text-[11px] text-base-content/50 font-mono shrink-0">
+                                        {{ dest.formattedClimbs }}
+                                    </span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </section>
+            </div>
         </div>
 
         <!-- Static Fallback for Search Engine Crawlers & Non-JS Clients -->
         <noscript>
+            <% if (directoryView.matchingSubAreas && directoryView.matchingSubAreas.length > 0) { %>
+                <section class="block w-full mb-12">
+                    <h2 class="text-2xl font-bold mb-4">Crags & Climbing Areas</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <% directoryView.matchingSubAreas.forEach(crag => { %>
+                            <div class="card bg-base-200/50 p-3 rounded-xl border">
+                                <a href="<%= crag.url %>" class="font-semibold text-secondary"><%= crag.name %></a>
+                                <span class="text-xs text-base-content/70"><%= crag.formattedClimbs %> climbs - <%= crag.pathSummary %></span>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
+            <% if (directoryView.matchingClimbs && directoryView.matchingClimbs.length > 0) { %>
+                <section class="block w-full mb-12">
+                    <h2 class="text-2xl font-bold mb-4">Climbs</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        <% directoryView.matchingClimbs.forEach(climb => { %>
+                            <div class="card bg-base-200/50 p-3 rounded-xl border">
+                                <a href="<%= climb.url %>" class="font-semibold text-accent"><%= climb.name %></a>
+                                <span class="text-xs font-bold"><%= climb.grade %></span>
+                                <span class="text-xs text-base-content/70"><%= climb.pathSummary %></span>
+                            </div>
+                        <% }); %>
+                    </div>
+                </section>
+            <% } %>
+
             <% if (directoryView.internationalCountries.length > 0) { %>
                 <section class="block w-full mb-16">
                     <h2 class="text-2xl font-bold mb-4">International</h2>

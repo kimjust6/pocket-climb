@@ -356,6 +356,7 @@
                                     loading="lazy"
                                     decoding="async"
                                     referrerpolicy="no-referrer"
+                                    @error="handleImageError($event, photo.fallbackUrl)"
                                     class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
                                 />
                                 <span
@@ -653,6 +654,12 @@
                 return list;
             });
 
+            function handleImageError(event, fallbackUrl) {
+                if (fallbackUrl && event && event.target && event.target.src !== fallbackUrl) {
+                    event.target.src = fallbackUrl;
+                }
+            }
+
             return {
                 isMounted,
                 allClimbs,
@@ -665,7 +672,8 @@
                 availableDisciplines,
                 hasActiveFilters,
                 filteredClimbs,
-                resetAllFilters
+                resetAllFilters,
+                handleImageError
             };
         }
     });

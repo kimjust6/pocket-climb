@@ -1,8 +1,11 @@
+import 'dotenv/config'
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 
 const OPENBETA_API = 'https://api.openbeta.io'
+const OPENBETA_MEDIA_BASE_URL = 'https://media.openbeta.io'
+const IMGUR_UPLOAD_ENDPOINT = 'https://api.imgur.com/3/image'
 const DB_PATH = path.resolve(process.cwd(), 'pb_data/data.db')
 
 const FEATURED_DESTINATION_UUIDS = [
@@ -12,7 +15,6 @@ const FEATURED_DESTINATION_UUIDS = [
     'a33bf360-9bf1-5d0f-b082-9ef3a51aa231', // Skaha
     '26913742-ffc5-5c8f-834b-7f0cd1b58d81', // The Bugaboos
     'fa6ebe07-759f-5a35-b715-c39bbb8424d2', // Lake Louise
-    'c63302da-5ca4-56f4-ac7f-cedda47a3b96', // Ontario South Bouldering and Rock
     // Germany
     'f67770f6-9aba-52da-a597-c8738ffa56e4', // Plankenstein
     // South Africa
@@ -225,6 +227,54 @@ async function gqlQuery(query, variables = {}, retries = 3) {
     }
 }
 
+async function uploadImageToImgur(imageUrl, clientId, retries = 2) {
+    if (!clientId || !imageUrl) return null
+    for (let attempt = 1; attempt <= retries; attempt++) {
+        try {
+            const formData = new FormData()
+            formData.append('image', imageUrl)
+            formData.append('type', 'url')
+
+            const res = await fetch(IMGUR_UPLOAD_ENDPOINT, {
+                method: 'POST',
+                headers: {
+                    Authorization: `Client-ID ${clientId}`,
+                },
+                body: formData,
+            })
+
+            const remaining = res.headers.get('x-ratelimit-userremaining')
+            if (res.status === 429 || (remaining !== null && parseInt(remaining, 10) <= 2)) {
+                return { error: 'rate_limit', remaining: 0 }
+            }
+
+            if (!res.ok) {
+                const text = await res.text().catch(() => '')
+                throw new Error(`HTTP ${res.status}: ${text}`)
+            }
+
+            const json = await res.json()
+            if (json?.success && json?.data?.link) {
+                const link = String(json.data.link).replace(/^http:\/\/i\.imgur\.com\//i, 'https://i.imgur.com/')
+                return {
+                    link,
+                    id: String(json.data.id || ''),
+                    width: json.data.width || 0,
+                    height: json.data.height || 0,
+                    size: json.data.size || 0,
+                }
+            }
+            return null
+        } catch (err) {
+            if (attempt === retries) {
+                return null
+            }
+            await new Promise((r) => setTimeout(r, 1000 * attempt))
+        }
+    }
+    return null
+}
+
 async function main() {
     const featuredSet = new Set(FEATURED_DESTINATION_UUIDS)
     const collectedAreas = new Map()
@@ -232,12 +282,18 @@ async function main() {
     const collectedPitches = []
     const collectedMedia = new Map()
     const collectedTicks = new Map()
+    const seenClimbsByKey = new Set()
     let organizationsList = []
 
     function registerArea(area, parentUuidOverride = null, forceDestination = false) {
-        if (!area || !area.uuid || area.area_name === 'Test Area 2014') return
+        if (!area || !area.uuid || area.area_name === 'Test Area 2014' || area.uuid === 'c63302da-5ca4-56f4-ac7f-cedda47a3b96') return
         const existing = collectedAreas.get(area.uuid)
-        const ancestors = Array.isArray(area.ancestors) ? area.ancestors : existing?.ancestors || []
+        let ancestors = Array.isArray(area.ancestors) ? area.ancestors : existing?.ancestors || []
+        // Clean out redundant intermediate container uuid
+        ancestors = ancestors.filter(u => u !== 'c63302da-5ca4-56f4-ac7f-cedda47a3b96')
+        let pathTokens = Array.isArray(area.pathTokens) ? area.pathTokens : existing?.pathTokens || []
+        pathTokens = pathTokens.filter(t => t !== 'Ontario South Bouldering and Rock')
+
         const selfIdx = ancestors.indexOf(area.uuid)
         const derivedParent =
             selfIdx > 0
@@ -245,9 +301,12 @@ async function main() {
                 : ancestors.length >= 2
                   ? ancestors[ancestors.length - 2]
                   : ''
-        const parentUuid =
+        let parentUuid =
             derivedParent ||
             (parentUuidOverride !== null ? parentUuidOverride : existing?.parentUuid || '')
+        if (parentUuid === 'c63302da-5ca4-56f4-ac7f-cedda47a3b96') {
+            parentUuid = 'c8c8a323-4d99-5810-b98e-9cb5165074cd'
+        }
 
         collectedAreas.set(area.uuid, {
             uuid: area.uuid,
@@ -256,7 +315,7 @@ async function main() {
             name: area.area_name || area.areaName || existing?.name || 'Unknown Area',
             shortCode: area.shortCode || existing?.shortCode || '',
             parentUuid,
-            pathTokens: Array.isArray(area.pathTokens) ? area.pathTokens : existing?.pathTokens || [],
+            pathTokens,
             ancestors,
             pathHash: area.pathHash || existing?.pathHash || '',
             gradeContext: area.gradeContext || existing?.gradeContext || 'US',
@@ -296,12 +355,31 @@ async function main() {
 
     function walkAreaTree(node, parentUuid = null) {
         if (!node || !node.uuid) return
+        if (node.uuid === 'c63302da-5ca4-56f4-ac7f-cedda47a3b96') {
+            // Flatten intermediate 'Ontario South Bouldering and Rock' container directly into Ontario
+            const ontarioUuid = 'c8c8a323-4d99-5810-b98e-9cb5165074cd'
+            for (const child of node.children || []) {
+                walkAreaTree(child, ontarioUuid)
+            }
+            return
+        }
         registerArea(node, parentUuid)
 
         for (const climb of node.climbs || []) {
             if (!climb || !climb.uuid) continue
+            const climbKey = `${node.uuid}:::${climb.name}:::${JSON.stringify(climb.grades || {})}:::${JSON.stringify(climb.type || {})}`
+            if (seenClimbsByKey.has(climbKey)) continue
+            seenClimbsByKey.add(climbKey)
+
+            let climbAncestors = Array.isArray(climb.ancestors) ? climb.ancestors : []
+            climbAncestors = climbAncestors.filter(u => u !== 'c63302da-5ca4-56f4-ac7f-cedda47a3b96')
+            let climbTokens = Array.isArray(climb.pathTokens) ? climb.pathTokens : []
+            climbTokens = climbTokens.filter(t => t !== 'Ontario South Bouldering and Rock')
+
             collectedClimbs.set(climb.uuid, {
                 ...climb,
+                ancestors: climbAncestors,
+                pathTokens: climbTokens,
                 areaUuid: node.uuid,
             })
 
@@ -467,6 +545,101 @@ async function main() {
         } catch (err) {
             console.warn(`  Warning crawling ${uuid}:`, err.message)
         }
+    }
+
+    // 3.5. Sync media images to Imgur (with fallback to original OpenBeta URLs)
+    const imgurClientId = (process.env.IMGUR_CLIENT_ID || '').trim()
+    console.log(`Syncing ${collectedMedia.size} images to Imgur (Client-ID configured: ${Boolean(imgurClientId)})...`)
+
+    // Query existing database for already uploaded Imgur links
+    const existingImgurMap = new Map()
+    try {
+        const queryRes = spawnSync('python3', [
+            '-c',
+            `
+import sqlite3, json
+conn = sqlite3.connect(${JSON.stringify(DB_PATH)})
+cur = conn.cursor()
+rows = cur.execute("SELECT openbetaId, mediaUrl, originalUrl FROM climb_media WHERE mediaUrl LIKE 'https://i.imgur.com/%'").fetchall()
+print(json.dumps(rows))
+`,
+        ])
+        if (queryRes.status === 0 && queryRes.stdout) {
+            const rows = JSON.parse(queryRes.stdout.toString())
+            for (const [obId, mUrl, oUrl] of rows) {
+                if (obId) existingImgurMap.set(obId, { imgurUrl: mUrl, originalUrl: oUrl })
+            }
+        }
+    } catch (_) {}
+
+    const mediaList = Array.from(collectedMedia.values())
+    const toUpload = []
+
+    for (const m of mediaList) {
+        const rawUrl = String(m.mediaUrl || '').trim()
+        const fullOriginalUrl = rawUrl.startsWith('http')
+            ? rawUrl
+            : (rawUrl.startsWith('/') ? `${OPENBETA_MEDIA_BASE_URL}${rawUrl}` : `${OPENBETA_MEDIA_BASE_URL}/${rawUrl}`)
+        m.originalUrl = fullOriginalUrl
+
+        if (existingImgurMap.has(m.id)) {
+            const cached = existingImgurMap.get(m.id)
+            m.mediaUrl = cached.imgurUrl
+            if (cached.originalUrl) m.originalUrl = cached.originalUrl
+        } else if (rawUrl.startsWith('https://i.imgur.com/')) {
+            m.mediaUrl = rawUrl
+        } else if (imgurClientId) {
+            toUpload.push(m)
+        } else {
+            m.mediaUrl = fullOriginalUrl
+        }
+    }
+
+    if (toUpload.length > 0 && imgurClientId) {
+        console.log(`  Uploading ${toUpload.length} images to Imgur (concurrency=3)...`)
+        let uploadedCount = 0
+        let fallbackCount = 0
+        let rateLimited = false
+        const concurrency = 3
+        let cursor = 0
+
+        async function worker() {
+            while (cursor < toUpload.length) {
+                if (rateLimited) break
+                const currentIdx = cursor++
+                const item = toUpload[currentIdx]
+
+                const res = await uploadImageToImgur(item.originalUrl, imgurClientId)
+                if (res?.error === 'rate_limit') {
+                    console.warn('  [Imgur] Rate limit threshold reached. Remaining images will use original URLs as fallback.')
+                    rateLimited = true
+                    item.mediaUrl = item.originalUrl
+                    fallbackCount++
+                    break
+                } else if (res?.link) {
+                    item.mediaUrl = res.link
+                    uploadedCount++
+                } else {
+                    item.mediaUrl = item.originalUrl
+                    fallbackCount++
+                }
+
+                const totalDone = uploadedCount + fallbackCount
+                if (totalDone % 50 === 0 || totalDone === toUpload.length) {
+                    console.log(`  Progress: ${totalDone}/${toUpload.length} images (${uploadedCount} uploaded to Imgur, ${fallbackCount} fallback)`)
+                }
+            }
+        }
+
+        await Promise.all(Array.from({ length: concurrency }, () => worker()))
+
+        if (rateLimited) {
+            for (let i = cursor; i < toUpload.length; i++) {
+                toUpload[i].mediaUrl = toUpload[i].originalUrl
+                fallbackCount++
+            }
+        }
+        console.log(`  Imgur image sync completed: ${uploadedCount} on Imgur, ${fallbackCount} using original fallback URL.`)
     }
 
     // 4. Write everything to SQLite in a single fast transaction
@@ -792,16 +965,49 @@ for m in (payload.get('media') or []):
     climb_id = climb_uuid_to_id.get(str(m.get('climbUuid') or ''), '')
     area_id = area_uuid_to_id.get(str(m.get('areaUuid') or ''), '')
     user_prof = m.get('user') or {}
+    media_url = str(m.get('mediaUrl') or '')
+    orig_url = str(m.get('originalUrl') or '')
+    if not orig_url:
+        if media_url.startswith('http') and not media_url.startswith('https://i.imgur.com/'):
+            orig_url = media_url
+        elif media_url.startswith('/'):
+            orig_url = 'https://media.openbeta.io' + media_url
+        elif not media_url.startswith('https://i.imgur.com/'):
+            orig_url = 'https://media.openbeta.io/' + media_url
+
     cur.execute("""
-        INSERT OR REPLACE INTO climb_media (
-            id, openbetaId, mediaUrl, file, climb, area, user,
+        INSERT INTO climb_media (
+            id, openbetaId, mediaUrl, originalUrl, file, climb, area, user,
             username, userUuid, width, height, format, size, uploadTime,
             entityTags, userProfile, isDeleted, created, updated
-        ) VALUES (?, ?, ?, '', ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        ) VALUES (?, ?, ?, ?, '', ?, ?, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            mediaUrl = CASE
+                WHEN excluded.mediaUrl LIKE 'https://i.imgur.com/%' THEN excluded.mediaUrl
+                WHEN climb_media.mediaUrl LIKE 'https://i.imgur.com/%' THEN climb_media.mediaUrl
+                ELSE excluded.mediaUrl
+            END,
+            originalUrl = CASE
+                WHEN excluded.originalUrl != '' THEN excluded.originalUrl
+                ELSE climb_media.originalUrl
+            END,
+            climb = CASE WHEN excluded.climb != '' THEN excluded.climb ELSE climb_media.climb END,
+            area = CASE WHEN excluded.area != '' THEN excluded.area ELSE climb_media.area END,
+            username = CASE WHEN excluded.username != '' THEN excluded.username ELSE climb_media.username END,
+            userUuid = CASE WHEN excluded.userUuid != '' THEN excluded.userUuid ELSE climb_media.userUuid END,
+            width = CASE WHEN excluded.width > 0 THEN excluded.width ELSE climb_media.width END,
+            height = CASE WHEN excluded.height > 0 THEN excluded.height ELSE climb_media.height END,
+            format = CASE WHEN excluded.format != '' THEN excluded.format ELSE climb_media.format END,
+            size = CASE WHEN excluded.size > 0 THEN excluded.size ELSE climb_media.size END,
+            uploadTime = CASE WHEN excluded.uploadTime != '' THEN excluded.uploadTime ELSE climb_media.uploadTime END,
+            entityTags = COALESCE(excluded.entityTags, climb_media.entityTags),
+            userProfile = COALESCE(excluded.userProfile, climb_media.userProfile),
+            updated = excluded.updated
     """, (
         rec_id,
         ob_id,
-        str(m.get('mediaUrl') or ''),
+        media_url,
+        orig_url,
         climb_id,
         area_id,
         str(m.get('username') or user_prof.get('username') or ''),
