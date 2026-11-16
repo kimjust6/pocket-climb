@@ -29,10 +29,12 @@
                     v-if="searchQuery"
                     @click="searchQuery = ''"
                     type="button"
-                    class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 text-base-content/60 hover:text-base-content h-5 w-5 min-h-0 text-[10px]"
+                    class="btn btn-ghost btn-xs btn-circle absolute right-1 top-1/2 -translate-y-1/2 text-base-content/60 hover:text-base-content h-5 w-5 min-h-0"
                     aria-label="Clear sub-area filter"
                 >
-                    ✕
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
                 </button>
             </div>
 

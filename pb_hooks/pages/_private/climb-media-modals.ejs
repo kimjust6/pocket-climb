@@ -22,7 +22,11 @@
                 <h3 id="lightbox-climb-title" class="text-lg font-bold text-secondary"></h3>
                 <p id="lightbox-meta" class="text-xs text-base-content/60 font-mono mt-0.5"></p>
             </div>
-            <button type="button" id="lightbox-close-btn" class="btn btn-sm btn-ghost btn-circle" aria-label="Close photo viewer">✕</button>
+            <button type="button" id="lightbox-close-btn" class="btn btn-sm btn-ghost btn-circle" aria-label="Close photo viewer">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
         </div>
 
         <div class="relative flex items-center justify-center bg-base-200/70 rounded-xl overflow-hidden min-h-[220px] max-h-[70vh]">
@@ -35,8 +39,11 @@
             <span id="lightbox-counter" class="text-xs font-mono text-base-content/60"></span>
             <div class="flex items-center gap-2 ml-auto">
                 <button type="button" id="lightbox-delete-btn" class="btn btn-xs btn-error btn-outline hidden">Delete Photo</button>
-                <a id="lightbox-open-original" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-ghost text-accent no-underline">
-                    Open original ↗
+                <a id="lightbox-open-original" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-xs btn-ghost text-accent no-underline inline-flex items-center gap-1">
+                    <span>Open original</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                    </svg>
                 </a>
             </div>
         </div>
@@ -55,7 +62,11 @@
                 <h3 class="text-lg font-bold text-secondary">Add Climb Photo</h3>
                 <p id="upload-modal-climb-name" class="text-sm text-base-content/70 mt-0.5"></p>
             </div>
-            <button type="button" id="upload-modal-close-btn" class="btn btn-sm btn-ghost btn-circle" aria-label="Close upload dialog">✕</button>
+            <button type="button" id="upload-modal-close-btn" class="btn btn-sm btn-ghost btn-circle" aria-label="Close upload dialog">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+            </button>
         </div>
 
         <% if (!isImgurConfigured) { %>
