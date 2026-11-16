@@ -227,7 +227,7 @@ async function gqlQuery(query, variables = {}, retries = 3) {
     }
 }
 
-async function uploadImageToImgur(imageUrl, clientId, retries = 2) {
+async function uploadImageToImgur(imageUrl, clientId, retries = 3) {
     if (!clientId || !imageUrl) return null
     for (let attempt = 1; attempt <= retries; attempt++) {
         try {
@@ -239,12 +239,24 @@ async function uploadImageToImgur(imageUrl, clientId, retries = 2) {
                 method: 'POST',
                 headers: {
                     Authorization: `Client-ID ${clientId}`,
+                    'User-Agent': 'WikiBloc/1.0',
                 },
                 body: formData,
             })
 
+            const resetSec = parseInt(res.headers.get('x-post-rate-limit-reset') || res.headers.get('x-ratelimit-userreset') || '0', 10)
             const remaining = res.headers.get('x-ratelimit-userremaining')
-            if (res.status === 429 || (remaining !== null && parseInt(remaining, 10) <= 2)) {
+
+            if (res.status === 429) {
+                if (attempt < retries && resetSec > 0 && resetSec <= 120) {
+                    console.log(`  [Imgur] Rate limited (429), waiting ${resetSec + 2}s for cooldown...`)
+                    await new Promise((r) => setTimeout(r, (resetSec + 2) * 1000))
+                    continue
+                }
+                return { error: 'rate_limit', remaining: 0 }
+            }
+
+            if (remaining !== null && parseInt(remaining, 10) <= 2) {
                 return { error: 'rate_limit', remaining: 0 }
             }
 
@@ -269,7 +281,7 @@ async function uploadImageToImgur(imageUrl, clientId, retries = 2) {
             if (attempt === retries) {
                 return null
             }
-            await new Promise((r) => setTimeout(r, 1000 * attempt))
+            await new Promise((r) => setTimeout(r, 2000 * attempt))
         }
     }
     return null
@@ -596,49 +608,44 @@ print(json.dumps(rows))
     }
 
     if (toUpload.length > 0 && imgurClientId) {
-        console.log(`  Uploading ${toUpload.length} images to Imgur (concurrency=3)...`)
+        console.log(`  Uploading ${toUpload.length} images to Imgur (paced 1.5s delay)...`)
         let uploadedCount = 0
         let fallbackCount = 0
         let rateLimited = false
-        const concurrency = 3
-        let cursor = 0
 
-        async function worker() {
-            while (cursor < toUpload.length) {
-                if (rateLimited) break
-                const currentIdx = cursor++
-                const item = toUpload[currentIdx]
-
-                const res = await uploadImageToImgur(item.originalUrl, imgurClientId)
-                if (res?.error === 'rate_limit') {
-                    console.warn('  [Imgur] Rate limit threshold reached. Remaining images will use original URLs as fallback.')
-                    rateLimited = true
-                    item.mediaUrl = item.originalUrl
-                    fallbackCount++
-                    break
-                } else if (res?.link) {
-                    item.mediaUrl = res.link
-                    uploadedCount++
-                } else {
-                    item.mediaUrl = item.originalUrl
-                    fallbackCount++
-                }
-
-                const totalDone = uploadedCount + fallbackCount
-                if (totalDone % 50 === 0 || totalDone === toUpload.length) {
-                    console.log(`  Progress: ${totalDone}/${toUpload.length} images (${uploadedCount} uploaded to Imgur, ${fallbackCount} fallback)`)
-                }
+        for (let i = 0; i < toUpload.length; i++) {
+            const item = toUpload[i]
+            if (rateLimited) {
+                item.mediaUrl = item.originalUrl
+                fallbackCount++
+                continue
             }
-        }
 
-        await Promise.all(Array.from({ length: concurrency }, () => worker()))
-
-        if (rateLimited) {
-            for (let i = cursor; i < toUpload.length; i++) {
-                toUpload[i].mediaUrl = toUpload[i].originalUrl
+            const res = await uploadImageToImgur(item.originalUrl, imgurClientId)
+            if (res?.error === 'rate_limit') {
+                console.warn('  [Imgur] Rate limit threshold reached. Remaining images will use original URLs as fallback.')
+                rateLimited = true
+                item.mediaUrl = item.originalUrl
+                fallbackCount++
+            } else if (res?.link) {
+                item.mediaUrl = res.link
+                uploadedCount++
+            } else {
+                item.mediaUrl = item.originalUrl
                 fallbackCount++
             }
+
+            const totalDone = uploadedCount + fallbackCount
+            if (totalDone % 25 === 0 || totalDone === toUpload.length) {
+                console.log(`  Progress: ${totalDone}/${toUpload.length} images (${uploadedCount} uploaded to Imgur, ${fallbackCount} fallback)`)
+            }
+
+            // Paced delay between uploads to avoid burst 429 limits
+            if (!rateLimited && i < toUpload.length - 1) {
+                await new Promise((r) => setTimeout(r, 1500))
+            }
         }
+
         console.log(`  Imgur image sync completed: ${uploadedCount} on Imgur, ${fallbackCount} using original fallback URL.`)
     }
 
