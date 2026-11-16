@@ -315,6 +315,170 @@ routerAdd("POST", "/api/climbs/update", handleUpdateClimbsRequest);
 routerAdd("GET", "/api/climbs/update", handleUpdateClimbsRequest);
 
 /**
+ * Unified Data Sync Endpoint for Cron Jobs & Webhooks
+ *
+ * GET/POST /api/sync
+ * GET/POST /api/cron/sync
+ *
+ * Supported query / body params:
+ * - token / secret: optional token matching CRON_SECRET from .env or admin_settings
+ * - status: "1" to return the last sync stats without triggering a new sync
+ * - mode: "areas" (default) or "catalog"
+ * - batchSize: number of areas per GraphQL request (default: 50)
+ * - limit: max leaf areas to process (default: 0 = all)
+ * - offset: start offset for pagination
+ * - all: "true" to process all areas
+ * - timeoutSeconds: safety timeout in seconds (default: 55)
+ * - syncMedia: "true" to also sync pending photos to Imgur (default: true if IMGUR_CLIENT_ID is set)
+ * - mediaLimit: max photos to sync to Imgur in this run (default: 10)
+ * - dryRun: "true" to simulate without writing
+ */
+function handleUnifiedSyncRequest(e) {
+    const {
+        updateClimbsFromOpenBeta,
+        getLastClimbsSyncStats,
+        syncPendingMediaToImgur,
+    } = require(`${__hooks}/pages/utils/pocket.js`);
+
+    const {
+        getAdminSetting,
+        getImgurClientId,
+    } = require(`${__hooks}/pages/utils/common.js`);
+
+    let query = {};
+    let body = {};
+    try {
+        const info = e.requestInfo();
+        query = info?.query || {};
+        body = info?.body || {};
+    } catch (_) {}
+
+    const getParam = (key) => (body && body[key] !== undefined ? body[key] : (query && query[key] !== undefined ? query[key] : undefined));
+
+    // Optional secret token authentication (CRON_SECRET)
+    const expectedSecret = (process.env.CRON_SECRET || getAdminSetting("CRON_SECRET") || "").trim();
+    if (expectedSecret) {
+        const authHeader = String(e.request?.headers?.get("Authorization") || "");
+        const bearerToken = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+        const queryToken = String(getParam("token") || getParam("secret") || "").trim();
+        const providedToken = queryToken || bearerToken;
+
+        if (!providedToken || providedToken !== expectedSecret) {
+            return e.json(401, {
+                ok: false,
+                status: "unauthorized",
+                message: "Unauthorized: Invalid or missing cron secret token. Provide ?token=... or Authorization: Bearer ...",
+            });
+        }
+    }
+
+    // Status check
+    const isStatusQuery = String(getParam("status") || "").toLowerCase();
+    if (isStatusQuery === "1" || isStatusQuery === "true") {
+        return e.json(200, {
+            ok: true,
+            status: "ok",
+            lastSync: getLastClimbsSyncStats(),
+        });
+    }
+
+    const mode = getParam("mode") || "areas";
+    const batchSize = parseInt(getParam("batchSize") || getParam("batch_size") || 50, 10);
+    const limit = parseInt(getParam("limit") || 0, 10);
+    const offset = parseInt(getParam("offset") || 0, 10);
+    const all = String(getParam("all") || "true").toLowerCase() === "true" || getParam("all") === true;
+    const dryRun = String(getParam("dryRun") || getParam("dry_run") || "").toLowerCase() === "true" || getParam("dryRun") === true;
+    const areaUuid = getParam("areaUuid") || getParam("area_uuid") || getParam("area");
+    const timeoutSeconds = parseInt(getParam("timeoutSeconds") || getParam("timeout") || 55, 10);
+
+    const syncMediaParam = getParam("syncMedia") !== undefined ? getParam("syncMedia") : getParam("sync_media");
+    const imgurClientId = getImgurClientId();
+    const shouldSyncMedia = syncMediaParam !== undefined
+        ? (String(syncMediaParam).toLowerCase() === "true" || syncMediaParam === true)
+        : Boolean(imgurClientId);
+    const mediaLimit = parseInt(getParam("mediaLimit") || getParam("media_limit") || 10, 10);
+
+    $app.logger().info("[Sync API] Cron data sync triggered", "mode", mode, "all", all, "timeoutSeconds", timeoutSeconds);
+
+    try {
+        const climbsStats = updateClimbsFromOpenBeta({
+            mode,
+            batchSize: batchSize > 0 ? batchSize : 50,
+            limit: limit > 0 ? limit : undefined,
+            offset,
+            all,
+            dryRun,
+            areaUuid,
+            timeoutSeconds: timeoutSeconds > 0 ? timeoutSeconds : 55,
+        });
+
+        let mediaStats = null;
+        if (shouldSyncMedia && !dryRun && climbsStats.status !== "error") {
+            try {
+                mediaStats = syncPendingMediaToImgur(mediaLimit);
+            } catch (mediaErr) {
+                $app.logger().warn("[Sync API] Media sync error during cron", "error", mediaErr);
+                mediaStats = { error: mediaErr?.message || String(mediaErr) };
+            }
+        }
+
+        const httpStatus = climbsStats.status === "error" ? 500 : (climbsStats.status === "partial_success" ? 206 : 200);
+
+        return e.json(httpStatus, {
+            ok: climbsStats.status !== "error",
+            status: climbsStats.status,
+            message: climbsStats.message,
+            timestamp: new Date().toISOString(),
+            climbs: climbsStats,
+            media: mediaStats,
+            tip: expectedSecret ? undefined : "Tip: You can secure this endpoint by setting CRON_SECRET in .env or PocketBase admin_settings."
+        });
+    } catch (err) {
+        $app.logger().error("[Sync API] Sync failed", "error", err);
+        return e.json(500, {
+            ok: false,
+            status: "error",
+            message: "Failed to execute data sync",
+            error: err?.message || String(err),
+        });
+    }
+}
+
+routerAdd("POST", "/api/sync", handleUnifiedSyncRequest);
+routerAdd("GET", "/api/sync", handleUnifiedSyncRequest);
+routerAdd("POST", "/api/cron/sync", handleUnifiedSyncRequest);
+routerAdd("GET", "/api/cron/sync", handleUnifiedSyncRequest);
+
+/**
+ * Built-in Weekly OpenBeta Data Sync Cron Job
+ * Runs automatically every Sunday at 03:00 UTC ("0 3 * * 0")
+ */
+cronAdd("weekly_openbeta_data_sync", "0 3 * * 0", () => {
+    $app.logger().info("[Weekly Cron] Starting scheduled weekly OpenBeta data sync...");
+    try {
+        const { updateClimbsFromOpenBeta, syncPendingMediaToImgur } = require(`${__hooks}/pages/utils/pocket.js`);
+        const { getImgurClientId } = require(`${__hooks}/pages/utils/common.js`);
+
+        const climbsStats = updateClimbsFromOpenBeta({
+            all: true,
+            timeoutSeconds: 55,
+        });
+        $app.logger().info("[Weekly Cron] Climbs sync completed", "stats", JSON.stringify(climbsStats));
+
+        if (getImgurClientId()) {
+            try {
+                const mediaStats = syncPendingMediaToImgur(15);
+                $app.logger().info("[Weekly Cron] Media sync completed", "uploaded", mediaStats.uploaded, "remaining", mediaStats.remaining);
+            } catch (mediaErr) {
+                $app.logger().warn("[Weekly Cron] Media sync error", "error", mediaErr);
+            }
+        }
+    } catch (err) {
+        $app.logger().error("[Weekly Cron] Scheduled sync error", "error", err);
+    }
+});
+
+/**
  * Create a climb_media record after uploading an image to Imgur (or via server Imgur fallback)
  * POST /api/climbs/{climbId}/media
  */

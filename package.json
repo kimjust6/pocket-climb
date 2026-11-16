@@ -15,7 +15,8 @@
     "typegen": "node scripts/typegen.mjs",
     "setup:openbeta": "node scripts/setup-openbeta-collections.mjs",
     "seed:openbeta": "node scripts/seed-openbeta-locations.mjs",
-    "sync:imgur": "python3 scripts/sync-media-to-imgur.py"
+    "sync:imgur": "python3 scripts/sync-media-to-imgur.py",
+    "sync:data": "node -e 'fetch(\"http://127.0.0.1:8090/api/sync\").then(r=>r.json()).then(console.log)'"
   },
   "description": "Justin's personal blog using PocketPages and DaisyUI.",
   "author": {

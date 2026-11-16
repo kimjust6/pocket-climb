@@ -655,6 +655,93 @@ function formatClimbMediaItem(record, currentUserId = '') {
 }
 
 /**
+ * Upload an image URL directly to Imgur anonymously via Client-ID
+ * @param {string} imageUrl
+ * @param {string} title
+ * @param {string} clientId
+ * @returns {{ ok: boolean, status: number, error?: string, link?: string }}
+ */
+function uploadImageUrlToImgur(imageUrl, title = '', clientId = '') {
+    const resolvedClientId = (clientId || getImgurClientId() || '').trim();
+    if (!resolvedClientId) {
+        return {
+            ok: false,
+            status: 503,
+            error: 'Imgur upload is not configured. Set IMGUR_CLIENT_ID in .env or admin_settings.'
+        };
+    }
+
+    const rawUrl = String(imageUrl || '').trim();
+    if (!rawUrl) {
+        return { ok: false, status: 400, error: 'Image URL is required.' };
+    }
+
+    if (typeof $http === 'undefined' || !$http.send) {
+        return { ok: false, status: 500, error: 'HTTP client is unavailable.' };
+    }
+
+    try {
+        const bodyParts = [
+            `image=${encodeURIComponent(rawUrl)}`,
+            'type=url'
+        ];
+        if (title) {
+            bodyParts.push(`title=${encodeURIComponent(String(title).slice(0, 120))}`);
+        }
+
+        const res = $http.send({
+            url: IMGUR_UPLOAD_ENDPOINT,
+            method: 'POST',
+            headers: {
+                Accept: 'application/json',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'User-Agent': 'WikiBloc/1.0',
+                Authorization: `Client-ID ${resolvedClientId}`
+            },
+            body: bodyParts.join('&'),
+            timeout: 25
+        });
+
+        let json = null;
+        try {
+            json = typeof res.json === 'object' && res.json !== null ? res.json : JSON.parse(res.raw || '{}');
+        } catch (_) {
+            json = null;
+        }
+
+        if (!res || res.statusCode < 200 || res.statusCode >= 300 || !json?.success || !json?.data?.link) {
+            const errMsg = json?.data?.error?.message || json?.data?.error || `Imgur upload failed (${res?.statusCode || 'network error'}).`;
+            return {
+                ok: false,
+                status: res?.statusCode || 500,
+                error: errMsg
+            };
+        }
+
+        let link = String(json.data.link);
+        if (link.startsWith('http://')) {
+            link = 'https://' + link.slice(7);
+        }
+
+        return {
+            ok: true,
+            status: res.statusCode,
+            link,
+            id: json.data.id || '',
+            width: json.data.width || 0,
+            height: json.data.height || 0,
+            size: json.data.size || 0
+        };
+    } catch (err) {
+        return {
+            ok: false,
+            status: 500,
+            error: err?.message || String(err)
+        };
+    }
+}
+
+/**
  * Upload a base64 image string to Imgur anonymously via Client-ID (server fallback)
  * @param {string} base64Input
  * @param {string} title
@@ -3228,6 +3315,7 @@ module.exports = {
     resolveClimbMediaUrl,
     formatClimbMediaItem,
     uploadBase64ToImgur,
+    uploadImageUrlToImgur,
     sendDiscordMessage,
     getOrganizationById,
     sendDiscordMessage2,

@@ -50,6 +50,7 @@ module.exports = {
     upsertOpenBetaPitchRecord,
     updateClimbsFromOpenBeta,
     getLastClimbsSyncStats,
+    syncPendingMediaToImgur,
 }
 
 /**
@@ -2061,6 +2062,82 @@ query GetCatalogLeafAreas($limit: Int!, $offset: Int!) {
         return resultStats;
     }
 }
+
+/**
+ * Sync a batch of pending climb_media records to Imgur
+ * @param {number} limit Max photos to upload in this run (default 10)
+ * @returns {{ uploaded: number, remaining: number, errors: string[] }}
+ */
+function syncPendingMediaToImgur(limit = 10) {
+    const { getImgurClientId, uploadImageUrlToImgur } = require(`${__hooks}/pages/utils/common.js`);
+    const clientId = getImgurClientId();
+    if (!clientId) {
+        return { uploaded: 0, remaining: 0, error: "Imgur Client-ID not configured" };
+    }
+
+    const maxLimit = Math.min(Math.max(parseInt(limit, 10) || 10, 1), 30);
+    const records = $app.findRecordsByFilter(
+        POCKET_CLIMB_MEDIA,
+        "isDeleted = false && mediaUrl !~ 'https://i.imgur.com/'",
+        "created",
+        maxLimit,
+        0
+    ) || [];
+
+    let uploaded = 0;
+    const errors = [];
+
+    for (let i = 0; i < records.length; i++) {
+        const rec = records[i];
+        const origUrl = rec.getString("originalUrl") || rec.getString("mediaUrl");
+        if (!origUrl) continue;
+
+        let fullUrl = origUrl;
+        if (!fullUrl.startsWith("http")) {
+            fullUrl = `https://media.openbeta.io${fullUrl.startsWith("/") ? "" : "/"}${fullUrl}`;
+        }
+
+        const res = uploadImageUrlToImgur(fullUrl, "", clientId);
+        if (res.ok && res.link) {
+            rec.set("mediaUrl", res.link);
+            if (!rec.getString("originalUrl")) {
+                rec.set("originalUrl", fullUrl);
+            }
+            $app.save(rec);
+            uploaded++;
+        } else {
+            errors.push(`${rec.id}: ${res.error || "upload failed"}`);
+            if (res.status === 429) {
+                // Rate limited, stop remaining in this batch
+                break;
+            }
+        }
+
+        // Polite pause between requests to prevent burst rate limit
+        if (i < records.length - 1) {
+            try { sleep(1500); } catch (_) {}
+        }
+    }
+
+    // Query remaining pending count
+    let remaining = 0;
+    try {
+        const remainingCountModel = arrayOf(new DynamicModel({ total: 0 }));
+        $app.db()
+            .select("COUNT(*) as total")
+            .from(POCKET_CLIMB_MEDIA)
+            .where($dbx.exp("isDeleted = 0 AND mediaUrl NOT LIKE 'https://i.imgur.com/%'"))
+            .all(remainingCountModel);
+        remaining = remainingCountModel[0]?.total || 0;
+    } catch (_) {}
+
+    return {
+        uploaded,
+        remaining,
+        errors,
+    };
+}
+
 
 
 
