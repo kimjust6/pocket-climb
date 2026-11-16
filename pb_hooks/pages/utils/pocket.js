@@ -5,6 +5,7 @@ const {
     POCKET_TICKS,
     POCKET_ORGANIZATIONS,
     POCKET_CLIMB_MEDIA,
+    POCKET_SYNC_LOGS,
     POCKET_USERS,
     POCKET_COLLECTION_ADMIN_SETTINGS,
     OPENBETA_API_ENDPOINT,
@@ -17,6 +18,7 @@ module.exports = {
     POCKET_TICKS,
     POCKET_ORGANIZATIONS,
     POCKET_CLIMB_MEDIA,
+    POCKET_SYNC_LOGS,
     POCKET_USERS,
     findUserByIdentity,
     authenticateUserWithPassword,
@@ -51,6 +53,9 @@ module.exports = {
     updateClimbsFromOpenBeta,
     getLastClimbsSyncStats,
     syncPendingMediaToImgur,
+    createSyncLogRecord,
+    getRecentSyncLogs,
+    getLatestSyncLog,
 }
 
 /**
@@ -558,25 +563,22 @@ function getClimbMediaByClimbIds(climbIds = []) {
     const chunkSize = 40;
     for (let start = 0; start < uniqueIds.length; start += chunkSize) {
         const chunk = uniqueIds.slice(start, start + chunkSize);
-        const clauses = [];
         const filterParams = {};
-        for (let i = 0; i < chunk.length; i++) {
-            const key = `cid${i}`;
-            clauses.push(`climb = {:${key}}`);
-            filterParams[key] = chunk[i];
-        }
+        const clauses = chunk.map((id, i) => {
+            filterParams[`cid${i}`] = id;
+            return `climb = {:cid${i}}`;
+        }).join(" || ");
+
         try {
             const batch = $app.findRecordsByFilter(
                 POCKET_CLIMB_MEDIA,
-                `isDeleted = false && (${clauses.join(" || ")})`,
+                `isDeleted = false && (${clauses})`,
                 "-created",
                 0,
                 0,
                 filterParams
             ) || [];
-            for (let j = 0; j < batch.length; j++) {
-                results.push(batch[j]);
-            }
+            results.push(...batch);
         } catch (err) {
             $app.logger().error("Failed to query climb media batch", "error", err);
         }
@@ -1473,22 +1475,20 @@ function getOrSyncAreaDetail(idOrUuid) {
                 { uuid }
             ) || [];
             if (descAreas.length > 0) {
-                const directDesc = [];
-                for (let i = 0; i < descAreas.length; i++) {
-                    const da = descAreas[i];
-                    let anc = [];
-                    try {
-                        const rawAnc = da.getString("ancestors") || da.get("ancestors");
-                        anc = Array.isArray(rawAnc)
-                            ? rawAnc
-                            : (typeof rawAnc === "string" && rawAnc.startsWith("[") ? JSON.parse(rawAnc) : []);
-                    } catch (_) {}
+                const parseAncestors = (raw) => {
+                    if (Array.isArray(raw)) return raw;
+                    if (typeof raw === "string" && raw.startsWith("[")) {
+                        try { return JSON.parse(raw); } catch (_) {}
+                    }
+                    return [];
+                };
+
+                const directDesc = descAreas.filter((da) => {
+                    const anc = parseAncestors(da.getString("ancestors") || da.get("ancestors"));
                     const daUuid = da.getString("openbetaUuid");
                     const idx = anc.indexOf(daUuid);
-                    if (idx > 0 && anc[idx - 1] === uuid) {
-                        directDesc.push(da);
-                    }
-                }
+                    return idx > 0 && anc[idx - 1] === uuid;
+                });
                 childAreas = directDesc.length > 0 ? directDesc : descAreas.slice(0, 24);
             }
         } catch (_) {}
@@ -1876,27 +1876,18 @@ function updateClimbsFromOpenBeta(options = {}) {
                     }
                 }
 
-                let batchClimbsCount = 0;
-                let batchPitchesCount = 0;
-
-                for (let a = 0; a < batchAreas.length; a++) {
-                    const cList = Array.isArray(batchAreas[a].climbs) ? batchAreas[a].climbs : [];
-                    batchClimbsCount += cList.length;
-                    for (let c = 0; c < cList.length; c++) {
-                        const pList = Array.isArray(cList[c].pitches) ? cList[c].pitches : [];
-                        batchPitchesCount += pList.length;
-                    }
-                }
+                const batchClimbsCount = batchAreas.reduce((sum, a) => sum + (a.climbs?.length || 0), 0);
+                const batchPitchesCount = batchAreas.reduce(
+                    (sum, a) => sum + (a.climbs || []).reduce((pSum, c) => pSum + (c.pitches?.length || 0), 0),
+                    0
+                );
 
                 if (!dryRun) {
                     $app.runInTransaction((txApp) => {
-                        for (let a = 0; a < batchAreas.length; a++) {
-                            const areaData = batchAreas[a];
-                            const areaUuid = areaData.uuid;
-                            const areaRecordId = areaIdMap[areaUuid] || "";
-                            const climbs = Array.isArray(areaData.climbs) ? areaData.climbs : [];
-                            for (let c = 0; c < climbs.length; c++) {
-                                upsertOpenBetaClimbRecord(climbs[c], areaUuid, areaRecordId, areaData, txApp);
+                        for (const areaData of batchAreas) {
+                            const areaRecordId = areaIdMap[areaData.uuid] || "";
+                            for (const climb of areaData.climbs || []) {
+                                upsertOpenBetaClimbRecord(climb, areaData.uuid, areaRecordId, areaData, txApp);
                             }
                         }
                     });
@@ -1992,27 +1983,19 @@ query GetCatalogLeafAreas($limit: Int!, $offset: Int!) {
                     break;
                 }
 
-                let batchClimbsCount = 0;
-                let batchPitchesCount = 0;
-
-                for (let a = 0; a < returnedAreas.length; a++) {
-                    const cList = Array.isArray(returnedAreas[a].climbs) ? returnedAreas[a].climbs : [];
-                    batchClimbsCount += cList.length;
-                    for (let c = 0; c < cList.length; c++) {
-                        const pList = Array.isArray(cList[c].pitches) ? cList[c].pitches : [];
-                        batchPitchesCount += pList.length;
-                    }
-                }
+                const batchClimbsCount = returnedAreas.reduce((sum, a) => sum + (a.climbs?.length || 0), 0);
+                const batchPitchesCount = returnedAreas.reduce(
+                    (sum, a) => sum + (a.climbs || []).reduce((pSum, c) => pSum + (c.pitches?.length || 0), 0),
+                    0
+                );
 
                 if (!dryRun) {
                     $app.runInTransaction((txApp) => {
-                        for (let a = 0; a < returnedAreas.length; a++) {
-                            const areaObj = returnedAreas[a];
+                        for (const areaObj of returnedAreas) {
                             const areaRecord = upsertOpenBetaAreaRecord(areaObj, null, null, txApp);
                             const areaRecordId = areaRecord?.id || "";
-                            const climbs = Array.isArray(areaObj.climbs) ? areaObj.climbs : [];
-                            for (let c = 0; c < climbs.length; c++) {
-                                upsertOpenBetaClimbRecord(climbs[c], areaObj.uuid, areaRecordId, areaObj, txApp);
+                            for (const climb of areaObj.climbs || []) {
+                                upsertOpenBetaClimbRecord(climb, areaObj.uuid, areaRecordId, areaObj, txApp);
                             }
                         }
                     });
@@ -2138,7 +2121,146 @@ function syncPendingMediaToImgur(limit = 10) {
     };
 }
 
+/**
+ * Create a new record in the sync_logs collection tracking a sync operation.
+ * Stores duration, status (success/failure/partial_success), date, counts, error messages, and payload.
+ *
+ * @param {Object} data
+ * @param {string} [data.status="success"] - "success", "partial_success", or "error"
+ * @param {string} [data.syncType="unified"] - "unified", "climbs", "media", or "openbeta"
+ * @param {string} [data.mode="areas"] - "areas", "catalog", "manual", "all"
+ * @param {number} [data.durationSeconds=0] - Total sync duration in seconds
+ * @param {string} [data.startedAt] - ISO timestamp when sync started
+ * @param {string} [data.completedAt] - ISO timestamp when sync completed
+ * @param {number} [data.areasProcessed=0] - Number of areas processed
+ * @param {number} [data.climbsUpdated=0] - Number of climbs updated
+ * @param {number} [data.pitchesUpdated=0] - Number of pitches updated
+ * @param {number} [data.mediaUploaded=0] - Number of media items uploaded to Imgur
+ * @param {number} [data.mediaRemaining=0] - Remaining media items pending upload
+ * @param {number} [data.requestsMade=0] - Number of external requests made
+ * @param {string} [data.errorMessage=""] - Error message if sync failed or had errors
+ * @param {any} [data.details=null] - Extra diagnostic payload or stats
+ * @param {string} [data.triggeredBy="api"] - "api", "cron", or "manual"
+ * @returns {Object|null} Formatted plain object of the created record, or null on error
+ */
+function createSyncLogRecord(data = {}) {
+    try {
+        const collection = $app.findCollectionByNameOrId(POCKET_SYNC_LOGS);
+        if (!collection) {
+            $app.logger().error("[Sync Logs] Collection not found: " + POCKET_SYNC_LOGS);
+            return null;
+        }
 
+        const record = new Record(collection);
+        const status = data.status || "success";
+        record.set("status", String(status).slice(0, 50));
+        record.set("syncType", String(data.syncType || "unified").slice(0, 50));
+        record.set("mode", String(data.mode || "").slice(0, 50));
 
+        const duration = parseFloat(data.durationSeconds !== undefined ? data.durationSeconds : (data.duration || 0));
+        record.set("durationSeconds", Number.isFinite(duration) ? Math.round(duration * 100) / 100 : 0);
 
+        const startedAt = data.startedAt || new Date().toISOString();
+        const completedAt = data.completedAt || new Date().toISOString();
+        record.set("startedAt", String(startedAt));
+        record.set("completedAt", String(completedAt));
+
+        record.set("areasProcessed", parseInt(data.areasProcessed || 0, 10));
+        record.set("climbsUpdated", parseInt(data.climbsUpdated || 0, 10));
+        record.set("pitchesUpdated", parseInt(data.pitchesUpdated || 0, 10));
+        record.set("mediaUploaded", parseInt(data.mediaUploaded || 0, 10));
+        record.set("mediaRemaining", parseInt(data.mediaRemaining || 0, 10));
+        record.set("requestsMade", parseInt(data.requestsMade || 0, 10));
+
+        if (data.errorMessage) {
+            record.set("errorMessage", String(data.errorMessage).slice(0, 2000));
+        }
+
+        if (data.details !== undefined && data.details !== null) {
+            record.set("details", data.details);
+        }
+
+        record.set("triggeredBy", String(data.triggeredBy || "api").slice(0, 50));
+        record.set("isDeleted", false);
+
+        $app.save(record);
+
+        return {
+            id: record.id,
+            status: record.getString("status"),
+            syncType: record.getString("syncType"),
+            mode: record.getString("mode"),
+            durationSeconds: record.getFloat("durationSeconds"),
+            startedAt: record.getString("startedAt"),
+            completedAt: record.getString("completedAt"),
+            areasProcessed: record.getInt("areasProcessed"),
+            climbsUpdated: record.getInt("climbsUpdated"),
+            pitchesUpdated: record.getInt("pitchesUpdated"),
+            mediaUploaded: record.getInt("mediaUploaded"),
+            mediaRemaining: record.getInt("mediaRemaining"),
+            requestsMade: record.getInt("requestsMade"),
+            errorMessage: record.getString("errorMessage"),
+            details: record.get("details"),
+            triggeredBy: record.getString("triggeredBy"),
+            created: record.getString("created"),
+            updated: record.getString("updated"),
+        };
+    } catch (err) {
+        $app.logger().error("[Sync Logs] Failed to create sync log record", "error", err);
+        return null;
+    }
+}
+
+/**
+ * Retrieve recent sync logs from the database
+ * Enforces `isDeleted = false` filter as per project guidelines.
+ *
+ * @param {number} [limit=10]
+ * @param {number} [offset=0]
+ * @returns {Array<Object>}
+ */
+function getRecentSyncLogs(limit = 10, offset = 0) {
+    try {
+        const records = $app.findRecordsByFilter(
+            POCKET_SYNC_LOGS,
+            "isDeleted = false",
+            "-created",
+            limit > 0 ? limit : 10,
+            offset >= 0 ? offset : 0
+        );
+
+        return (records || []).map((r) => ({
+            id: r.id,
+            status: r.getString("status"),
+            syncType: r.getString("syncType"),
+            mode: r.getString("mode"),
+            durationSeconds: r.getFloat("durationSeconds"),
+            startedAt: r.getString("startedAt"),
+            completedAt: r.getString("completedAt"),
+            areasProcessed: r.getInt("areasProcessed"),
+            climbsUpdated: r.getInt("climbsUpdated"),
+            pitchesUpdated: r.getInt("pitchesUpdated"),
+            mediaUploaded: r.getInt("mediaUploaded"),
+            mediaRemaining: r.getInt("mediaRemaining"),
+            requestsMade: r.getInt("requestsMade"),
+            errorMessage: r.getString("errorMessage"),
+            details: r.get("details"),
+            triggeredBy: r.getString("triggeredBy"),
+            created: r.getString("created"),
+            updated: r.getString("updated"),
+        }));
+    } catch (err) {
+        $app.logger().warn("[Sync Logs] Failed to retrieve sync logs", "error", err);
+        return [];
+    }
+}
+
+/**
+ * Retrieve the latest sync log entry from the database
+ * @returns {Object|null}
+ */
+function getLatestSyncLog() {
+    const logs = getRecentSyncLogs(1, 0);
+    return logs.length > 0 ? logs[0] : null;
+}
 

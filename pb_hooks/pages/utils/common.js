@@ -1180,14 +1180,8 @@ function toNoCookie(s) {
             const width = wMatch ? parseInt(wMatch[1], 10) : null;
             const height = hMatch ? parseInt(hMatch[1], 10) : null;
 
-            let isVertical = false;
-            let aspectRatio = '16 / 9';
-            if (width && height && height > width) {
-                isVertical = true;
-                aspectRatio = `${width} / ${height}`;
-            } else if (width && height) {
-                aspectRatio = `${width} / ${height}`;
-            }
+            const isVertical = Boolean(width && height && height > width);
+            const aspectRatio = (width && height) ? `${width} / ${height}` : '16 / 9';
 
             if (!/\btitle=/i.test(cleanAttrs)) {
                 cleanAttrs = ' title="YouTube video player"' + cleanAttrs;
@@ -1580,17 +1574,14 @@ function renderMarkdown(markdownText, options = {}) {
         }
 
         // Standard paragraph: collect consecutive non-blank, non-block-starter lines
+        const isBlockStarter = (trimmed) => (
+            !trimmed ||
+            trimmed.startsWith('```') ||
+            /^#{1,6}\s+|^>\s?|^[-*+]\s+|^\d+\.\s+|^(?:[-]{3,}|[*]{3,}|[_]{3,})$/.test(trimmed)
+        );
+
         const paraLines = [];
-        while (
-            i < lines.length &&
-            lines[i].trim() !== '' &&
-            !lines[i].trim().startsWith('```') &&
-            !/^(?:[-]{3,}|[*]{3,}|[_]{3,})$/.test(lines[i].trim()) &&
-            !/^#{1,6}\s+/.test(lines[i].trim()) &&
-            !/^>\s?/.test(lines[i].trim()) &&
-            !/^[-*+]\s+/.test(lines[i].trim()) &&
-            !/^\d+\.\s+/.test(lines[i].trim())
-        ) {
+        while (i < lines.length && !isBlockStarter(lines[i].trim())) {
             paraLines.push(renderInlineMarkdown(lines[i].trim()));
             i++;
         }
@@ -1687,27 +1678,15 @@ function getAuthenticatedUser(reqOrEvent) {
         if (!record) {
             const cookiesMap = extractCookiesMap(reqOrEvent);
             const rawCookie = cookiesMap ? cookiesMap[AUTH_COOKIE_NAME] : null;
-            let token = null;
-            if (typeof rawCookie === 'string') {
-                token = rawCookie;
-            } else if (rawCookie && typeof rawCookie === 'object') {
-                token = rawCookie.token || rawCookie.value || null;
-            }
+            const cookieToken = typeof rawCookie === 'string' ? rawCookie : (rawCookie?.token || rawCookie?.value || null);
 
-            if (!token) {
-                const headerAccessor = reqOrEvent.request?.header || reqOrEvent.header;
-                let authHeader = '';
-                if (headerAccessor && typeof headerAccessor.get === 'function') {
-                    authHeader = headerAccessor.get('Authorization') || '';
-                } else if (typeof headerAccessor === 'function') {
-                    authHeader = headerAccessor('Authorization') || '';
-                }
-                const bearerMatch = String(authHeader).match(/^Bearer\s+(.+)$/i);
-                if (bearerMatch) {
-                    token = bearerMatch[1].trim();
-                }
-            }
+            const headerAccessor = reqOrEvent.request?.header || reqOrEvent.header;
+            const authHeader = typeof headerAccessor?.get === 'function'
+                ? (headerAccessor.get('Authorization') || '')
+                : (typeof headerAccessor === 'function' ? (headerAccessor('Authorization') || '') : '');
+            const bearerToken = String(authHeader).match(/^Bearer\s+(.+)$/i)?.[1]?.trim() || null;
 
+            const token = cookieToken || bearerToken;
             if (token) {
                 record = getAuthRecordFromToken(token);
             }
@@ -2232,24 +2211,8 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
         const name = r.getString("name");
         const totalClimbs = r.getInt("totalClimbs") || 0;
         const geoPoint = r.getGeoPoint("coordinates");
-        let pathTokens = [];
-        let ancestors = [];
-        try {
-            const rawTokens = r.getString("pathTokens") || r.get("pathTokens");
-            if (Array.isArray(rawTokens)) {
-                pathTokens = rawTokens;
-            } else if (typeof rawTokens === "string" && rawTokens.startsWith("[")) {
-                pathTokens = JSON.parse(rawTokens);
-            }
-        } catch (_) { }
-        try {
-            const rawAnc = r.getString("ancestors") || r.get("ancestors");
-            if (Array.isArray(rawAnc)) {
-                ancestors = rawAnc;
-            } else if (typeof rawAnc === "string" && rawAnc.startsWith("[")) {
-                ancestors = JSON.parse(rawAnc);
-            }
-        } catch (_) { }
+        const pathTokens = parseJsonArrayField(r, "pathTokens");
+        const ancestors = parseJsonArrayField(r, "ancestors");
 
         return {
             id: r.id,
@@ -2280,24 +2243,17 @@ function prepareHomepageDirectoryViewData(params = {}, reqObj = null, data = nul
     // Group direct children by parentUuid and destinations by country/state ancestor UUID
     const childrenByParentUuid = {};
     const destinationsByGroupUuid = {};
-    for (let i = 0; i < areaItems.length; i++) {
-        const item = areaItems[i];
+    for (const item of areaItems) {
         if (!item.parentUuid) continue;
 
-        if (!childrenByParentUuid[item.parentUuid]) {
-            childrenByParentUuid[item.parentUuid] = [];
-        }
-        childrenByParentUuid[item.parentUuid].push(item);
+        (childrenByParentUuid[item.parentUuid] ||= []).push(item);
 
         if (item.isDestination) {
             const groupUuid = (usaUuid && item.ancestors[0] === usaUuid && item.ancestors.length >= 2)
                 ? item.ancestors[1]
                 : (item.ancestors[0] || item.parentUuid);
             if (groupUuid && groupUuid !== item.uuid) {
-                if (!destinationsByGroupUuid[groupUuid]) {
-                    destinationsByGroupUuid[groupUuid] = [];
-                }
-                destinationsByGroupUuid[groupUuid].push(item);
+                (destinationsByGroupUuid[groupUuid] ||= []).push(item);
             }
         }
     }
@@ -2556,48 +2512,28 @@ function computeClimbGradeMetrics(gradesObj = {}) {
     const s = raw.toUpperCase();
     let rank = 20;
 
+    const V_RANKS = [17, 20, 24, 28, 32, 38, 42, 48, 50, 54, 58, 60, 62];
+    const LOW_YDS_RANKS = { 6: 14, 7: 17, 8: 20, 9: 24 };
+    const YDS_SUB_OFFSETS = { a: 0, '-': 0, b: 2, c: 4, '+': 4, d: 6 };
+
     const vMatch = s.match(/^V(\d+)/);
     if (vMatch) {
         const vNum = parseInt(vMatch[1], 10);
-        if (vNum === 0) rank = 17;
-        else if (vNum === 1) rank = 20;
-        else if (vNum === 2) rank = 24;
-        else if (vNum === 3) rank = 28;
-        else if (vNum === 4) rank = 32;
-        else if (vNum === 5) rank = 38;
-        else if (vNum === 6) rank = 42;
-        else if (vNum === 7) rank = 48;
-        else if (vNum === 8) rank = 50;
-        else if (vNum === 9) rank = 54;
-        else if (vNum === 10) rank = 58;
-        else if (vNum === 11) rank = 60;
-        else if (vNum === 12) rank = 62;
-        else rank = 64 + Math.min(18, (vNum - 13) * 2);
+        rank = vNum < V_RANKS.length ? V_RANKS[vNum] : 64 + Math.min(18, (vNum - 13) * 2);
     } else if (s === 'VB' || s === 'V-EASY') {
         rank = 10;
     } else {
         const ydsMatch = s.match(/^5\.(\d+)([ABCD+-]?)/);
         if (ydsMatch) {
             const num = parseInt(ydsMatch[1], 10);
-            const mod = ydsMatch[2] ? ydsMatch[2].toLowerCase() : '';
-            if (num < 6) rank = 10;
-            else if (num === 6) rank = 14;
-            else if (num === 7) rank = 17;
-            else if (num === 8) rank = 20;
-            else if (num === 9) rank = 24;
-            else {
-                let sub = 2;
-                if (mod === 'a' || mod === '-') sub = 0;
-                else if (mod === 'b') sub = 2;
-                else if (mod === 'c' || mod === '+') sub = 4;
-                else if (mod === 'd') sub = 6;
-
-                if (num === 10) rank = 28 + sub;
-                else if (num === 11) rank = 38 + sub;
-                else if (num === 12) rank = 48 + sub;
-                else if (num === 13) rank = 58 + sub;
-                else if (num === 14) rank = 68 + sub;
-                else rank = 78 + sub;
+            const mod = (ydsMatch[2] || '').toLowerCase();
+            if (num < 6) {
+                rank = 10;
+            } else if (LOW_YDS_RANKS[num]) {
+                rank = LOW_YDS_RANKS[num];
+            } else {
+                const sub = YDS_SUB_OFFSETS[mod] ?? 2;
+                rank = 28 + (Math.min(num, 15) - 10) * 10 + sub;
             }
         } else {
             const frMatch = s.match(/^([4-9])([ABC])(\+?)/);
@@ -2748,20 +2684,16 @@ function buildAreaBreadcrumbs(pathTokens = [], ancestors = [], markLastCurrent =
  */
 function groupFormattedClimbMedia(rawMediaRecords = [], currentUserId = '') {
     const mediaByClimbId = {};
-    for (let mIdx = 0; mIdx < rawMediaRecords.length; mIdx++) {
-        const mRec = rawMediaRecords[mIdx];
+    for (const mRec of rawMediaRecords) {
         const mClimbId = mRec.getString('climb');
         if (!mClimbId) continue;
         const formatted = formatClimbMediaItem(mRec, currentUserId);
         if (!formatted) continue;
-        if (!mediaByClimbId[mClimbId]) {
-            mediaByClimbId[mClimbId] = [];
-        }
-        mediaByClimbId[mClimbId].push(formatted);
+        (mediaByClimbId[mClimbId] ||= []).push(formatted);
     }
-    Object.keys(mediaByClimbId).forEach((cid) => {
-        mediaByClimbId[cid].sort((a, b) => (b.sortTimestamp || 0) - (a.sortTimestamp || 0));
-    });
+    for (const items of Object.values(mediaByClimbId)) {
+        items.sort((a, b) => (b.sortTimestamp || 0) - (a.sortTimestamp || 0));
+    }
     return mediaByClimbId;
 }
 

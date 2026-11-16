@@ -256,7 +256,12 @@ onRecordAfterCreateSuccess((e) => {
  * 3. Specific Area: If areaUuid is provided, syncs that area in 1 single HTTP request.
  */
 function handleUpdateClimbsRequest(e) {
-    const { updateClimbsFromOpenBeta, getLastClimbsSyncStats } = require(`${__hooks}/pages/utils/pocket.js`);
+    const {
+        updateClimbsFromOpenBeta,
+        getLastClimbsSyncStats,
+        createSyncLogRecord,
+        getRecentSyncLogs,
+    } = require(`${__hooks}/pages/utils/pocket.js`);
 
     let query = {};
     let body = {};
@@ -270,9 +275,11 @@ function handleUpdateClimbsRequest(e) {
 
     const isStatusQuery = String(getParam("status") || "").toLowerCase();
     if (isStatusQuery === "1" || isStatusQuery === "true") {
+        const recentLogs = getRecentSyncLogs(5);
         return e.json(200, {
             status: "ok",
-            lastSync: getLastClimbsSyncStats(),
+            lastSync: recentLogs[0] || getLastClimbsSyncStats(),
+            history: recentLogs,
         });
     }
 
@@ -284,6 +291,9 @@ function handleUpdateClimbsRequest(e) {
     const dryRun = String(getParam("dryRun") || getParam("dry_run") || "").toLowerCase() === "true" || getParam("dryRun") === true;
     const areaUuid = getParam("areaUuid") || getParam("area_uuid") || getParam("area");
     const timeoutSeconds = parseInt(getParam("timeoutSeconds") || getParam("timeout") || -1, 10);
+
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
 
     try {
         const stats = updateClimbsFromOpenBeta({
@@ -297,14 +307,54 @@ function handleUpdateClimbsRequest(e) {
             timeoutSeconds: timeoutSeconds >= 0 ? timeoutSeconds : undefined,
         });
 
+        const completedAt = new Date().toISOString();
+        const durationSeconds = Math.round((Date.now() - startTime) / 10) / 100;
+        const errorMessage = stats.status === "error"
+            ? (stats.message || "Climbs update failed")
+            : (stats.failedBatches && stats.failedBatches.length > 0 ? `Failed batches: ${stats.failedBatches.length}` : "");
+
+        const syncLog = createSyncLogRecord({
+            status: stats.status || "success",
+            syncType: "climbs",
+            mode,
+            durationSeconds: stats.durationSeconds || durationSeconds,
+            startedAt,
+            completedAt,
+            areasProcessed: stats.areasProcessed || 0,
+            climbsUpdated: stats.climbsUpdated || 0,
+            pitchesUpdated: stats.pitchesUpdated || 0,
+            requestsMade: stats.requestsMade || 0,
+            errorMessage,
+            details: stats,
+            triggeredBy: "api",
+        });
+
         const httpStatus = stats.status === "error" ? 500 : (stats.status === "partial_success" ? 206 : 200);
-        return e.json(httpStatus, stats);
+        return e.json(httpStatus, {
+            ...stats,
+            syncLogId: syncLog?.id || null,
+        });
     } catch (err) {
         $app.logger().error("Failed to update climbs from OpenBeta", "error", err);
+        const completedAt = new Date().toISOString();
+        const durationSeconds = Math.round((Date.now() - startTime) / 10) / 100;
+        const syncLog = createSyncLogRecord({
+            status: "error",
+            syncType: "climbs",
+            mode,
+            durationSeconds,
+            startedAt,
+            completedAt,
+            errorMessage: err?.message || String(err),
+            details: { error: err?.message || String(err) },
+            triggeredBy: "api",
+        });
+
         return e.json(500, {
             status: "error",
             message: "Failed to update climbs from OpenBeta",
             error: err?.message || String(err),
+            syncLogId: syncLog?.id || null,
         });
     }
 }
@@ -338,6 +388,9 @@ function handleUnifiedSyncRequest(e) {
         updateClimbsFromOpenBeta,
         getLastClimbsSyncStats,
         syncPendingMediaToImgur,
+        createSyncLogRecord,
+        getRecentSyncLogs,
+        getLatestSyncLog,
     } = require(`${__hooks}/pages/utils/pocket.js`);
 
     const {
@@ -375,10 +428,12 @@ function handleUnifiedSyncRequest(e) {
     // Status check
     const isStatusQuery = String(getParam("status") || "").toLowerCase();
     if (isStatusQuery === "1" || isStatusQuery === "true") {
+        const recentLogs = getRecentSyncLogs(10);
         return e.json(200, {
             ok: true,
             status: "ok",
-            lastSync: getLastClimbsSyncStats(),
+            lastSync: recentLogs[0] || getLatestSyncLog() || getLastClimbsSyncStats(),
+            history: recentLogs,
         });
     }
 
@@ -399,6 +454,9 @@ function handleUnifiedSyncRequest(e) {
     const mediaLimit = parseInt(getParam("mediaLimit") || getParam("media_limit") || 10, 10);
 
     $app.logger().info("[Sync API] Cron data sync triggered", "mode", mode, "all", all, "timeoutSeconds", timeoutSeconds);
+
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
 
     try {
         const climbsStats = updateClimbsFromOpenBeta({
@@ -422,24 +480,83 @@ function handleUnifiedSyncRequest(e) {
             }
         }
 
+        const completedAt = new Date().toISOString();
+        const durationSeconds = Math.round((Date.now() - startTime) / 10) / 100;
+
+        let syncStatus = climbsStats.status || "success";
+        if (mediaStats && mediaStats.error && syncStatus === "success") {
+            syncStatus = "partial_success";
+        }
+
+        let errorMessage = "";
+        if (climbsStats.status === "error") {
+            errorMessage = climbsStats.message || "Climbs update failed";
+        } else if (mediaStats && mediaStats.error) {
+            errorMessage = "Media sync warning: " + (mediaStats.error?.message || mediaStats.error);
+        } else if (climbsStats.failedBatches && climbsStats.failedBatches.length > 0) {
+            errorMessage = `Failed batches: ${climbsStats.failedBatches.length}`;
+        }
+
+        const userAgent = String(e.request?.headers?.get("User-Agent") || "");
+        const triggeredBy = userAgent.toLowerCase().includes("cron") ? "cron" : "api";
+
+        const syncLog = createSyncLogRecord({
+            status: syncStatus,
+            syncType: "unified",
+            mode,
+            durationSeconds,
+            startedAt,
+            completedAt,
+            areasProcessed: climbsStats.areasProcessed || 0,
+            climbsUpdated: climbsStats.climbsUpdated || 0,
+            pitchesUpdated: climbsStats.pitchesUpdated || 0,
+            mediaUploaded: mediaStats?.uploaded || 0,
+            mediaRemaining: mediaStats?.remaining || 0,
+            requestsMade: climbsStats.requestsMade || 0,
+            errorMessage,
+            details: {
+                climbs: climbsStats,
+                media: mediaStats,
+            },
+            triggeredBy,
+        });
+
         const httpStatus = climbsStats.status === "error" ? 500 : (climbsStats.status === "partial_success" ? 206 : 200);
 
         return e.json(httpStatus, {
             ok: climbsStats.status !== "error",
             status: climbsStats.status,
             message: climbsStats.message,
-            timestamp: new Date().toISOString(),
+            timestamp: completedAt,
+            durationSeconds,
+            syncLogId: syncLog?.id || null,
             climbs: climbsStats,
             media: mediaStats,
             tip: expectedSecret ? undefined : "Tip: You can secure this endpoint by setting CRON_SECRET in .env or PocketBase admin_settings."
         });
     } catch (err) {
         $app.logger().error("[Sync API] Sync failed", "error", err);
+        const completedAt = new Date().toISOString();
+        const durationSeconds = Math.round((Date.now() - startTime) / 10) / 100;
+
+        const syncLog = createSyncLogRecord({
+            status: "error",
+            syncType: "unified",
+            mode,
+            durationSeconds,
+            startedAt,
+            completedAt,
+            errorMessage: err?.message || String(err),
+            details: { error: err?.message || String(err) },
+            triggeredBy: "api",
+        });
+
         return e.json(500, {
             ok: false,
             status: "error",
             message: "Failed to execute data sync",
             error: err?.message || String(err),
+            syncLogId: syncLog?.id || null,
         });
     }
 }
@@ -455,8 +572,14 @@ routerAdd("GET", "/api/cron/sync", handleUnifiedSyncRequest);
  */
 cronAdd("weekly_openbeta_data_sync", "0 3 * * 0", () => {
     $app.logger().info("[Weekly Cron] Starting scheduled weekly OpenBeta data sync...");
+    const startedAt = new Date().toISOString();
+    const startTime = Date.now();
     try {
-        const { updateClimbsFromOpenBeta, syncPendingMediaToImgur } = require(`${__hooks}/pages/utils/pocket.js`);
+        const {
+            updateClimbsFromOpenBeta,
+            syncPendingMediaToImgur,
+            createSyncLogRecord,
+        } = require(`${__hooks}/pages/utils/pocket.js`);
         const { getImgurClientId } = require(`${__hooks}/pages/utils/common.js`);
 
         const climbsStats = updateClimbsFromOpenBeta({
@@ -465,16 +588,67 @@ cronAdd("weekly_openbeta_data_sync", "0 3 * * 0", () => {
         });
         $app.logger().info("[Weekly Cron] Climbs sync completed", "stats", JSON.stringify(climbsStats));
 
+        let mediaStats = null;
         if (getImgurClientId()) {
             try {
-                const mediaStats = syncPendingMediaToImgur(15);
+                mediaStats = syncPendingMediaToImgur(15);
                 $app.logger().info("[Weekly Cron] Media sync completed", "uploaded", mediaStats.uploaded, "remaining", mediaStats.remaining);
             } catch (mediaErr) {
                 $app.logger().warn("[Weekly Cron] Media sync error", "error", mediaErr);
+                mediaStats = { error: mediaErr?.message || String(mediaErr) };
             }
         }
+
+        const completedAt = new Date().toISOString();
+        const durationSeconds = Math.round((Date.now() - startTime) / 10) / 100;
+
+        let syncStatus = climbsStats.status || "success";
+        if (mediaStats && mediaStats.error && syncStatus === "success") {
+            syncStatus = "partial_success";
+        }
+
+        let errorMessage = "";
+        if (climbsStats.status === "error") {
+            errorMessage = climbsStats.message || "Climbs update failed";
+        } else if (mediaStats && mediaStats.error) {
+            errorMessage = "Media sync warning: " + (mediaStats.error?.message || mediaStats.error);
+        }
+
+        createSyncLogRecord({
+            status: syncStatus,
+            syncType: "cron",
+            mode: "areas",
+            durationSeconds,
+            startedAt,
+            completedAt,
+            areasProcessed: climbsStats.areasProcessed || 0,
+            climbsUpdated: climbsStats.climbsUpdated || 0,
+            pitchesUpdated: climbsStats.pitchesUpdated || 0,
+            mediaUploaded: mediaStats?.uploaded || 0,
+            mediaRemaining: mediaStats?.remaining || 0,
+            requestsMade: climbsStats.requestsMade || 0,
+            errorMessage,
+            details: { climbs: climbsStats, media: mediaStats },
+            triggeredBy: "cron",
+        });
     } catch (err) {
         $app.logger().error("[Weekly Cron] Scheduled sync error", "error", err);
+        const completedAt = new Date().toISOString();
+        const durationSeconds = Math.round((Date.now() - startTime) / 10) / 100;
+        try {
+            const { createSyncLogRecord } = require(`${__hooks}/pages/utils/pocket.js`);
+            createSyncLogRecord({
+                status: "error",
+                syncType: "cron",
+                mode: "areas",
+                durationSeconds,
+                startedAt,
+                completedAt,
+                errorMessage: err?.message || String(err),
+                details: { error: err?.message || String(err) },
+                triggeredBy: "cron",
+            });
+        } catch (_) {}
     }
 });
 

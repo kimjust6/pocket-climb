@@ -109,12 +109,14 @@
                         <% } %>
                         <% if (climb.difficultyTier && climb.difficultyTier !== 'Unrated') { %>
                             <%
-                                let tierBadgeClass = 'badge-ghost';
-                                if (climb.difficultyTier === 'Beginner') tierBadgeClass = 'badge-success';
-                                else if (climb.difficultyTier === 'Intermediate') tierBadgeClass = 'badge-info';
-                                else if (climb.difficultyTier === 'Advanced') tierBadgeClass = 'badge-warning';
-                                else if (climb.difficultyTier === 'Expert') tierBadgeClass = 'badge-error';
-                                else if (climb.difficultyTier === 'Elite') tierBadgeClass = 'badge-secondary';
+                                const tierBadgeMap = {
+                                    Beginner: 'badge-success',
+                                    Intermediate: 'badge-info',
+                                    Advanced: 'badge-warning',
+                                    Expert: 'badge-error',
+                                    Elite: 'badge-secondary',
+                                };
+                                const tierBadgeClass = tierBadgeMap[climb.difficultyTier] || 'badge-ghost';
                             %>
                             <span class="badge <%= tierBadgeClass %> badge-outline font-semibold text-xs">
                                 <%= climb.difficultyTier %>

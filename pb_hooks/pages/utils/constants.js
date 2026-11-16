@@ -4,6 +4,7 @@ const POCKET_PITCHES = "pitches"
 const POCKET_TICKS = "ticks"
 const POCKET_ORGANIZATIONS = "organizations"
 const POCKET_CLIMB_MEDIA = "climb_media"
+const POCKET_SYNC_LOGS = "sync_logs"
 const POCKET_USERS = "users"
 const OPENBETA_API_ENDPOINT = "https://api.openbeta.io"
 const AUTH_COOKIE_NAME = "pb_auth"
@@ -97,6 +98,7 @@ module.exports = {
     POCKET_TICKS,
     POCKET_ORGANIZATIONS,
     POCKET_CLIMB_MEDIA,
+    POCKET_SYNC_LOGS,
     POCKET_USERS,
     OPENBETA_API_ENDPOINT,
     AUTH_COOKIE_NAME,

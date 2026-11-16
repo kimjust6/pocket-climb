@@ -480,7 +480,37 @@ async function main() {
         ],
     })
 
-    console.log('Successfully created/updated all 6 OpenBeta collections!')
+    // 7. Create/Update `sync_logs`
+    const syncLogsFields = [
+        { name: 'status', type: 'text', required: true, presentable: true },
+        { name: 'syncType', type: 'text', required: false },
+        { name: 'mode', type: 'text', required: false },
+        { name: 'durationSeconds', type: 'number', required: false },
+        { name: 'startedAt', type: 'text', required: false },
+        { name: 'completedAt', type: 'text', required: false },
+        { name: 'areasProcessed', type: 'number', onlyInt: true, required: false },
+        { name: 'climbsUpdated', type: 'number', onlyInt: true, required: false },
+        { name: 'pitchesUpdated', type: 'number', onlyInt: true, required: false },
+        { name: 'mediaUploaded', type: 'number', onlyInt: true, required: false },
+        { name: 'mediaRemaining', type: 'number', onlyInt: true, required: false },
+        { name: 'requestsMade', type: 'number', onlyInt: true, required: false },
+        { name: 'errorMessage', type: 'text', required: false },
+        { name: 'details', type: 'json', required: false },
+        { name: 'triggeredBy', type: 'text', required: false },
+        { name: 'isDeleted', type: 'bool', required: false },
+        ...AUTODATE_FIELDS,
+    ]
+
+    await upsertCollection('sync_logs', {
+        fields: syncLogsFields,
+        indexes: [
+            'CREATE INDEX `idx_sync_logs_created` ON `sync_logs` (`created`)',
+            'CREATE INDEX `idx_sync_logs_status` ON `sync_logs` (`status`)',
+            'CREATE INDEX `idx_sync_logs_syncType` ON `sync_logs` (`syncType`)',
+        ],
+    })
+
+    console.log('Successfully created/updated all 7 OpenBeta & Sync collections!')
 }
 
 main().catch((err) => {

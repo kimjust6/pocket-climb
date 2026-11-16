@@ -657,16 +657,15 @@
                 });
 
                 // Sorting
-                if (sort === 'name-asc') {
-                    list = [...list].sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-                } else if (sort === 'grade-asc') {
-                    list = [...list].sort((a, b) => (a.difficultyRank || 0) - (b.difficultyRank || 0));
-                } else if (sort === 'grade-desc') {
-                    list = [...list].sort((a, b) => (b.difficultyRank || 0) - (a.difficultyRank || 0));
-                } else if (sort === 'length-desc') {
-                    list = [...list].sort((a, b) => (b.length || 0) - (a.length || 0));
-                } else if (sort === 'pitches-desc') {
-                    list = [...list].sort((a, b) => (b.pitchesCount || 0) - (a.pitchesCount || 0));
+                const sortComparators = {
+                    'name-asc': (a, b) => (a.name || '').localeCompare(b.name || ''),
+                    'grade-asc': (a, b) => (a.difficultyRank || 0) - (b.difficultyRank || 0),
+                    'grade-desc': (a, b) => (b.difficultyRank || 0) - (a.difficultyRank || 0),
+                    'length-desc': (a, b) => (b.length || 0) - (a.length || 0),
+                    'pitches-desc': (a, b) => (b.pitchesCount || 0) - (a.pitchesCount || 0),
+                };
+                if (sortComparators[sort]) {
+                    list.sort(sortComparators[sort]);
                 }
 
                 return list;

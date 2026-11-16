@@ -208,7 +208,7 @@
             });
 
             const cragCount = computed(() => {
-                return allSubareas.value.filter(s => !s.isBoulder).length;
+                return allSubareas.value.length - boulderCount.value;
             });
 
             const filteredSubareas = computed(() => {
