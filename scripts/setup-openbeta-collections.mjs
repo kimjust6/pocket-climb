@@ -1,16 +1,9 @@
 import 'dotenv/config'
 import PocketBase from 'pocketbase'
 
-const url = process.env.PB_TYPEGEN_URL || 'http://127.0.0.1:8090'
-const username = process.env.PB_TYPEGEN_USERNAME || process.env.PB_TYPEGEN_EMAIL
-const password = process.env.PB_TYPEGEN_PASSWORD
-
-if (!username || !password) {
-    console.error('Missing PB_TYPEGEN_USERNAME or PB_TYPEGEN_PASSWORD in .env')
-    process.exit(1)
-}
-
-const pb = new PocketBase(url)
+const defaultUrl = process.env.PB_TYPEGEN_URL || 'http://127.0.0.1:8090'
+const defaultUsername = process.env.PB_TYPEGEN_USERNAME || process.env.PB_TYPEGEN_EMAIL
+const defaultPassword = process.env.PB_TYPEGEN_PASSWORD
 
 const DISCIPLINE_VALUES = [
     'trad',
@@ -72,33 +65,43 @@ const AUTODATE_FIELDS = [
     },
 ]
 
-async function upsertCollection(name, schemaConfig) {
-    let existing = null
-    try {
-        existing = await pb.collections.getOne(name)
-    } catch (_) {
-        existing = null
+export async function setupCollections({
+    url = defaultUrl,
+    username = defaultUsername,
+    password = defaultPassword,
+} = {}) {
+    if (!username || !password) {
+        throw new Error('Missing PB_TYPEGEN_USERNAME or PB_TYPEGEN_PASSWORD')
     }
 
-    if (existing) {
-        console.log(`Updating existing collection: ${name} (${existing.id})`)
-        return await pb.collections.update(existing.id, schemaConfig)
-    } else {
-        console.log(`Creating new collection: ${name}`)
-        return await pb.collections.create({
-            name,
-            type: 'base',
-            listRule: '',
-            viewRule: '',
-            createRule: null,
-            updateRule: null,
-            deleteRule: null,
-            ...schemaConfig,
-        })
-    }
-}
+    const pb = new PocketBase(url)
 
-async function main() {
+    async function upsertCollection(name, schemaConfig) {
+        let existing = null
+        try {
+            existing = await pb.collections.getOne(name)
+        } catch (_) {
+            existing = null
+        }
+
+        if (existing) {
+            console.log(`  * Updating existing collection: ${name} (${existing.id})`)
+            return await pb.collections.update(existing.id, schemaConfig)
+        } else {
+            console.log(`  * Creating new collection: ${name}`)
+            return await pb.collections.create({
+                name,
+                type: 'base',
+                listRule: '',
+                viewRule: '',
+                createRule: null,
+                updateRule: null,
+                deleteRule: null,
+                ...schemaConfig,
+            })
+        }
+    }
+
     await pb.collection('_superusers').authWithPassword(username, password)
     console.log(`Connected to PocketBase at ${url}`)
 
@@ -112,7 +115,7 @@ async function main() {
         try {
             const col = await pb.collections.getOne(colName)
             await pb.collections.delete(col.id)
-            console.log(`Deleted legacy Zendesk collection: ${colName}`)
+            console.log(`  * Deleted legacy Zendesk collection: ${colName}`)
         } catch (_) {
             // Already removed
         }
@@ -120,7 +123,7 @@ async function main() {
 
     const usersCol = await pb.collections.getOne('users')
 
-    // 1. Create/Update `areas` (initially without self-relation if not yet created)
+    // 1. Create/Update `areas`
     const baseAreasFields = [
         { name: 'openbetaUuid', type: 'text', required: true },
         { name: 'openbetaId', type: 'text', required: false },
@@ -153,22 +156,43 @@ async function main() {
         ...AUTODATE_FIELDS,
     ]
 
-    let areasCol = await upsertCollection('areas', {
-        fields: baseAreasFields,
-        indexes: [
-            'CREATE UNIQUE INDEX `idx_areas_openbetaUuid` ON `areas` (`openbetaUuid`)',
-            'CREATE INDEX `idx_areas_name` ON `areas` (`name`)',
-            'CREATE INDEX `idx_areas_isDestination` ON `areas` (`isDestination`)',
-        ],
-    })
+    let existingAreas = null
+    try {
+        existingAreas = await pb.collections.getOne('areas')
+    } catch (_) {
+        existingAreas = null
+    }
 
-    // Add self-referential `parent` relation to `areas`
+    let areasColId = existingAreas?.id
+
+    if (!existingAreas) {
+        // Create initial areas collection without self-relation
+        const createdAreas = await pb.collections.create({
+            name: 'areas',
+            type: 'base',
+            listRule: '',
+            viewRule: '',
+            createRule: null,
+            updateRule: null,
+            deleteRule: null,
+            fields: baseAreasFields,
+            indexes: [
+                'CREATE UNIQUE INDEX `idx_areas_openbetaUuid` ON `areas` (`openbetaUuid`)',
+                'CREATE INDEX `idx_areas_name` ON `areas` (`name`)',
+                'CREATE INDEX `idx_areas_isDestination` ON `areas` (`isDestination`)',
+            ],
+        })
+        areasColId = createdAreas.id
+        console.log(`  * Created initial areas collection (${areasColId})`)
+    }
+
+    // Configure self-referential `parent` relation on `areas` without dropping it if it already exists
     const areasWithParentFields = [
         ...baseAreasFields.slice(0, 5),
         {
             name: 'parent',
             type: 'relation',
-            collectionId: areasCol.id,
+            collectionId: areasColId,
             cascadeDelete: false,
             minSelect: 0,
             maxSelect: 1,
@@ -177,7 +201,7 @@ async function main() {
         ...baseAreasFields.slice(5),
     ]
 
-    areasCol = await pb.collections.update(areasCol.id, {
+    const areasCol = await pb.collections.update(areasColId, {
         fields: areasWithParentFields,
         indexes: [
             'CREATE UNIQUE INDEX `idx_areas_openbetaUuid` ON `areas` (`openbetaUuid`)',
@@ -186,7 +210,7 @@ async function main() {
             'CREATE INDEX `idx_areas_isDestination` ON `areas` (`isDestination`)',
         ],
     })
-    console.log(`Configured self-relation on areas (${areasCol.id})`)
+    console.log(`  * Configured areas with parent relation (${areasCol.id})`)
 
     // 2. Create/Update `climbs`
     const climbsFields = [
@@ -513,8 +537,11 @@ async function main() {
     console.log('Successfully created/updated all 7 OpenBeta & Sync collections!')
 }
 
-main().catch((err) => {
-    console.error('Error setting up OpenBeta collections:', err?.response || err)
-    process.exit(1)
-})
+const isMain = process.argv[1] && process.argv[1].endsWith('setup-openbeta-collections.mjs')
+if (isMain) {
+    setupCollections().catch((err) => {
+        console.error('Error setting up OpenBeta collections:', err?.response || err)
+        process.exit(1)
+    })
+}
 

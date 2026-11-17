@@ -1,7 +1,7 @@
 {
     "description": "DO NOT DELETE THIS FILE. This file is used to keep track of which files have been synced in the most recent deployment. If you delete this file a resync will need to be done (which can take a while) - read more: https://github.com/SamKirkland/FTP-Deploy-Action",
     "version": "1.0.0",
-    "generatedTime": 1794805457150,
+    "generatedTime": 1794885957179,
     "data": [
         {
             "type": "folder",
@@ -123,39 +123,9 @@
         },
         {
             "type": "file",
-            "name": "pb_migrations/data.db-wal",
-            "size": 181312,
-            "hash": "e7357e70c1abb49da95c886cbbb40ee7703110b5be36bb18e72aa296ba8fc854"
-        },
-        {
-            "type": "file",
-            "name": "pb_migrations/data.db-shm",
-            "size": 32768,
-            "hash": "1623b8c67dc69266a1537de85fa55d4c3a083457ac842608dfabe3c06b8d8687"
-        },
-        {
-            "type": "file",
-            "name": "pb_migrations/data.db",
-            "size": 4096,
-            "hash": "5c9dec1886cc01f5f2307ee1ea87f9b32a4cef0f8f9a2c68beebc558013bedab"
-        },
-        {
-            "type": "file",
-            "name": "pb_migrations/auxiliary.db-wal",
-            "size": 24752,
-            "hash": "9b45f875214e4c2eba7002822ee7528f37649862f29ac5bd3f2906a064cb4cfb"
-        },
-        {
-            "type": "file",
-            "name": "pb_migrations/auxiliary.db-shm",
-            "size": 32768,
-            "hash": "8be896fd65b1f86516caa61ff8cc2597ba37295470274ad0049b6a977cfaf0d4"
-        },
-        {
-            "type": "file",
-            "name": "pb_migrations/auxiliary.db",
-            "size": 4096,
-            "hash": "5c9dec1886cc01f5f2307ee1ea87f9b32a4cef0f8f9a2c68beebc558013bedab"
+            "name": "pb_migrations/1794867635_created_sync_logs.js",
+            "size": 6629,
+            "hash": "fc6c4138a8719fd063917b411f9cc31869f42677946b370b75717b57dbdbd8cd"
         },
         {
             "type": "file",
@@ -324,8 +294,8 @@
         {
             "type": "file",
             "name": "pb_hooks/main.pb.js",
-            "size": 25303,
-            "hash": "32df6c7c899167f72b0976f29701d377554c9480c6463a95604b666786bd0736"
+            "size": 28502,
+            "hash": "f9af17122c0dfddecca5a23e3b158f95ae32287ea96c45523f462250cada3b76"
         },
         {
             "type": "folder",
@@ -396,12 +366,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/app.css",
-            "size": 122179,
-            "hash": "769474d4554017d22e972aec89f11ac801ca848753a8b9275ff601c094d68d82"
-        },
-        {
-            "type": "folder",
-            "name": "pb_hooks/pages/api"
+            "size": 126011,
+            "hash": "5300166d08d838129b9b1b51aa00e6d9c6b72832ac9eee96ea57bcc2c1f421e2"
         },
         {
             "type": "folder",
@@ -432,20 +398,20 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/utils/pocket.js",
-            "size": 74742,
-            "hash": "492d355ca3200d9f0752059aa312b273819b2a885be9be35fd97191036b34967"
+            "size": 80047,
+            "hash": "8b323fa3bfb95ff8da10a8f49638a966949f38677c27c4d35f99a76f859de6e9"
         },
         {
             "type": "file",
             "name": "pb_hooks/pages/utils/constants.js",
-            "size": 4722,
-            "hash": "511156afc3f7ad48a2188f80fe85077a0b72a1b8af55ed50acadbfb43b621e09"
+            "size": 4781,
+            "hash": "ba3b166da3f5d91aaf6216b6514b0f74de02311f101d5750808a1344763e36f4"
         },
         {
             "type": "file",
             "name": "pb_hooks/pages/utils/common.js",
-            "size": 120039,
-            "hash": "5c1bfff41eebc55befa1f5f7475baf7a353ce825354987e355b841065ad2951a"
+            "size": 117579,
+            "hash": "4454efb110cde281f3e155cddd46415a2cfb3d6f6aa2b01b788f882350e9eb23"
         },
         {
             "type": "file",
@@ -558,14 +524,14 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/_private/area-subareas-island.ejs",
-            "size": 11074,
-            "hash": "ca15e094afc716337a0a28580e13a7cf29d561596e16d28afa18c230dfd88f80"
+            "size": 11069,
+            "hash": "aee25872de6881c0879c34fa6dcf0ec84a9e6da07f8e03a4817014207976442a"
         },
         {
             "type": "file",
             "name": "pb_hooks/pages/_private/area-climbs-island.ejs",
-            "size": 38347,
-            "hash": "5efe4a18e1bd8f7d3e46fb419d327010b897b9bf60a854bdab10342b6d7ace84"
+            "size": 38209,
+            "hash": "193b0ab3df42f46f5c7ff80a76472df1792b37c10b63aa2311af999f187dcadb"
         },
         {
             "type": "folder",
@@ -615,10 +581,6 @@
         },
         {
             "type": "folder",
-            "name": "pb_hooks/pages/(navbarLayout)/blog"
-        },
-        {
-            "type": "folder",
             "name": "pb_hooks/pages/(navbarLayout)/area"
         },
         {
@@ -658,8 +620,8 @@
         {
             "type": "file",
             "name": "pb_hooks/pages/(navbarLayout)/climb/[uuid]/[slug].ejs",
-            "size": 25975,
-            "hash": "ec2a1f9d7172033c3f95148eac201371dcbf54aef186d9d013e294451a79af94"
+            "size": 25865,
+            "hash": "7edb2318794a793c9cc0b7ee86840c86be3e430f88d15026628cacf7adc19395"
         },
         {
             "type": "folder",
