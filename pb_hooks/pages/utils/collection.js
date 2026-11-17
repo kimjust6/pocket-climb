@@ -315,4 +315,11 @@ module.exports = {
     formatCollectionDiscordMessage,
     getHttpJson,
     getHttpText,
+    parseCsv,
+    decodeHttpBody,
+    parseIsoDate,
+    formatIsoDate,
+    addUtcDays,
+    getWeekStart,
+    getWeekEnd,
 };

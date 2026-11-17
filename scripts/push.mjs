@@ -1,6 +1,40 @@
 import 'dotenv/config'
 import { spawnSync } from 'child_process'
+import { fileURLToPath } from 'url'
+import path from 'path'
+import fs from 'fs'
 import { setupCollections } from './setup-openbeta-collections.mjs'
+
+export const DEPLOY_EXCLUDE_PATTERNS = [
+    'pb_data',
+    'pb_data/**/*',
+    'package.json',
+    'bun.lock',
+    'bun.lockb',
+    'patches',
+    'patches/**/*',
+    '*.db',
+    '*.db-shm',
+    '*.db-wal',
+    'tests',
+    'tests/**/*',
+    'test',
+    'test/**/*',
+    '**/tests/**',
+    '**/test/**',
+    '**/*.test.*',
+    '**/*.spec.*',
+]
+
+export function buildPhioArgs(targetInstance, excludes = DEPLOY_EXCLUDE_PATTERNS) {
+    return [
+        'phio',
+        'deploy',
+        targetInstance,
+        '-e',
+        ...excludes,
+    ]
+}
 
 const args = process.argv.slice(2)
 const skipMigrate = args.includes('--skip-migrate') || args.includes('--skip-db')
@@ -21,7 +55,7 @@ const targetUrl =
 const username = process.env.PB_TYPEGEN_USERNAME || process.env.PB_TYPEGEN_EMAIL
 const password = process.env.PB_TYPEGEN_PASSWORD
 
-async function run() {
+export async function run() {
     console.log('='.repeat(60))
     console.log(`Push to Prod: [${instanceName}]`)
     console.log(`Target URL:   ${targetUrl}`)
@@ -57,29 +91,18 @@ async function run() {
 
     // Step 2: Deploy code via phio deploy
     console.log(`\n[2/2] Deploying code to PocketHost (${instanceName})...`)
+    const phioArgs = buildPhioArgs(instanceName)
+
     if (dryRun) {
-        console.log('  [Dry Run] Would execute: npx phio deploy ' + instanceName)
+        console.log('  [Dry Run] Would execute: npx ' + phioArgs.join(' '))
         console.log('\n' + '='.repeat(60))
         console.log(`[Dry Run] Push simulated successfully for ${targetUrl}`)
         console.log('='.repeat(60))
+        if (isMainModule) {
+            process.exit(0)
+        }
         return
     }
-    const phioArgs = [
-        'phio',
-        'deploy',
-        instanceName,
-        '-e',
-        'pb_data',
-        'pb_data/**/*',
-        'package.json',
-        'bun.lock',
-        'bun.lockb',
-        'patches',
-        'patches/**/*',
-        '*.db',
-        '*.db-shm',
-        '*.db-wal',
-    ]
 
     const deployResult = spawnSync('npx', phioArgs, {
         stdio: 'inherit',
@@ -94,9 +117,27 @@ async function run() {
     console.log('\n' + '='.repeat(60))
     console.log(`Push complete! Database and application are synced at ${targetUrl}`)
     console.log('='.repeat(60))
+    if (isMainModule) {
+        process.exit(0)
+    }
 }
 
-run().catch((err) => {
-    console.error('Fatal error during push:', err)
-    process.exit(1)
-})
+let isMainModule = false
+if (process.argv[1]) {
+    try {
+        isMainModule = fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1])
+    } catch {
+        isMainModule = path.resolve(fileURLToPath(import.meta.url)) === path.resolve(process.argv[1])
+    }
+}
+
+if (isMainModule) {
+    run()
+        .then(() => {
+            process.exit(0)
+        })
+        .catch((err) => {
+            console.error('Fatal error during push:', err)
+            process.exit(1)
+        })
+}

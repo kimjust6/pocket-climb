@@ -3279,6 +3279,8 @@ module.exports = {
     prepareHomepageDirectoryViewData,
     prepareAreaDetailViewData,
     prepareClimbDetailViewData,
-    computeClimbGradeMetrics
+    computeClimbGradeMetrics,
+    parseCookieHeader,
+    getTicketTitle
 };
 
