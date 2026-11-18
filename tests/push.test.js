@@ -106,6 +106,17 @@ test('npm run push exclusion configuration', async (t) => {
         );
     });
 
+    await t.test('rejects malicious or invalid instance names to prevent injection', () => {
+        const rootDir = path.resolve(__dirname, '..');
+        const result = spawnSync('node', ['scripts/push.mjs', 'my-blog;rm -rf /', '--dry-run', '--skip-migrate'], {
+            cwd: rootDir,
+            encoding: 'utf-8',
+        });
+
+        assert.equal(result.status, 1);
+        assert.ok(result.stderr.includes('Invalid instance name'));
+    });
+
     await t.test('package.json scripts are properly configured', () => {
         const pkgJson = JSON.parse(
             fs.readFileSync(path.resolve(__dirname, '../package.json'), 'utf-8')

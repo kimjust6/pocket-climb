@@ -42,6 +42,13 @@ const dryRun = args.includes('--dry-run')
 const filteredArgs = args.filter((a) => !a.startsWith('--'))
 const instanceName = filteredArgs[0] || process.env.PHIO_INSTANCE || 'my-blog'
 
+if (!/^[a-zA-Z0-9_-]+$/.test(instanceName)) {
+    console.error(
+        `[ERROR] Invalid instance name: "${instanceName}". Only alphanumeric characters, dashes, and underscores are allowed.`
+    )
+    process.exit(1)
+}
+
 const INSTANCE_URLS = {
     'my-blog': process.env.PB_PROD_URL || 'https://wiki-bloc.jkim.win',
     'mlt-blog': process.env.MLT_BLOG_URL || 'https://mlt-blog.pockethost.io',
@@ -106,7 +113,7 @@ export async function run() {
 
     const deployResult = spawnSync('npx', phioArgs, {
         stdio: 'inherit',
-        shell: true,
+        shell: process.platform === 'win32',
     })
 
     if (deployResult.status !== 0) {
