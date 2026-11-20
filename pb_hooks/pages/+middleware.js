@@ -13,7 +13,7 @@ module.exports = function (api) {
             cookieValue = cookiesMap.theme.value || cookiesMap.theme;
         }
     } catch (e) {
-        console.log("Error reading cookies:", e);
+        $app.logger().warn("Error reading cookies", "error", e);
     }
 
     let pathname = '/';

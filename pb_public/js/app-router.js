@@ -19,7 +19,6 @@
         { path: '/privacy', name: 'privacy', component: { render: () => null } },
         { path: '/terms', name: 'terms', component: { render: () => null } },
         { path: '/faq', name: 'faq', component: { render: () => null } },
-        { path: '/zen', name: 'zen', component: { render: () => null } },
         { path: '/:pathMatch(.*)*', name: 'catch-all', component: { render: () => null } }
     ];
 

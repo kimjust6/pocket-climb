@@ -1,5 +1,5 @@
 {
-  "name": "justins-blog",
+  "name": "pocket-climb",
   "private": true,
   "version": "0.0.2",
   "scripts": {
@@ -7,6 +7,8 @@
     "start": "pocketbase serve --dir=pb_data --dev",
     "wsl": "wsl bash -c \"set -a && source .env && set +a && npm run dev\"",
     "css": "tailwindcss -i ./pb_hooks/pages/app.tailwind.css -o ./pb_hooks/pages/app.css --minify --watch",
+    "check": "node -c pb_hooks/main.pb.js && node -c pb_hooks/mcp.pb.js && node -c pb_hooks/pocketpages.pb.js && node -c pb_hooks/pages/utils/common.js && node -c pb_hooks/pages/utils/pocket.js && node -c pb_hooks/pages/utils/constants.js",
+    "test": "node --test tests/*.test.js",
     "push2": "node scripts/push.mjs mlt-blog",
     "push": "node scripts/push.mjs my-blog",
     "push:code": "npx phio deploy my-blog -e pb_data \"pb_data/**/*\" \"*.db*\"",
@@ -21,20 +23,21 @@
     "sync:imgur": "python3 scripts/sync-media-to-imgur.py",
     "sync:data": "node -e 'fetch(\"http://127.0.0.1:8090/api/sync\").then(r=>r.json()).then(console.log)'"
   },
-  "description": "Justin's personal blog using PocketPages and DaisyUI.",
+  "description": "Wiki Bloc — an open-source community climbing wiki built with PocketPages, PocketBase, and DaisyUI.",
   "author": {
     "name": "Justin Kim",
     "github": "kimjust6"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/kimjust6/pocket-blog/"
+    "url": "https://github.com/kimjust6/pocket-climb/"
   },
   "keywords": [
     "pocketpages",
-    "blog",
-    "daisyui",
-    "justin kim"
+    "pocketbase",
+    "climbing",
+    "openbeta",
+    "daisyui"
   ],
   "devDependencies": {
     "@esbuild/linux-x64": "^0.28.1",

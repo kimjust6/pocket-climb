@@ -24,6 +24,6 @@ module.exports = function (api) {
                 }),
             },
         ],
-        debug: true,
+        debug: typeof process !== 'undefined' && process.env?.POCKETPAGES_DEBUG === 'true',
     }
 }
