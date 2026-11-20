@@ -1,1 +1,39 @@
-faq
+<script server>
+    const { applyPageMetadata, getBaseUrl } = require(`${__hooks}/pages/utils/common.js`);
+    applyPageMetadata(data.metadata, {
+        title: 'FAQ | Wiki Bloc',
+        description: 'Frequently asked questions about Wiki Bloc, OpenBeta climbing data, and community photo or tick contributions.',
+        url: `${getBaseUrl()}/faq`,
+    });
+</script>
+
+<section class="bg-base-100 pt-24 pb-20 min-h-[calc(100vh-12.54rem)] not-prose">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6">
+        <div class="card dark:bg-base-300/80 bg-base-300/60 border border-secondary/20 rounded-2xl p-6 sm:p-8 shadow-lg space-y-6">
+            <h1 class="text-3xl font-bold text-base-content">Frequently Asked Questions</h1>
+
+            <div class="space-y-4 text-base-content/85">
+                <div>
+                    <h2 class="text-lg font-semibold text-base-content">What is Wiki Bloc?</h2>
+                    <p class="mt-1 text-sm leading-relaxed">
+                        Wiki Bloc is an open-source community climbing directory built with PocketBase and PocketPages, aggregating climbing areas, routes, and boulder problems with OpenBeta data.
+                    </p>
+                </div>
+
+                <div>
+                    <h2 class="text-lg font-semibold text-base-content">Where does the climbing data come from?</h2>
+                    <p class="mt-1 text-sm leading-relaxed">
+                        Area and route metadata is synchronized from <a href="https://openbeta.io" target="_blank" rel="noopener noreferrer" class="link link-primary">OpenBeta</a>, combined with community-contributed photos and ticks.
+                    </p>
+                </div>
+
+                <div>
+                    <h2 class="text-lg font-semibold text-base-content">How can I contribute photos or ticks?</h2>
+                    <p class="mt-1 text-sm leading-relaxed">
+                        <a href="/login" class="link link-primary">Sign in</a> to your account, open any climb page, and upload route photos or log your sends.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>

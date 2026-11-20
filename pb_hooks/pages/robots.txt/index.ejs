@@ -1,15 +1,20 @@
 <script server>
+    const { getBaseUrl } = require(`${__hooks}/pages/utils/common.js`)
+    const baseUrl = getBaseUrl()
     response.header('Content-Type', 'text/plain; charset=utf-8')
     response.write(`User-agent: *
 Allow: /
 
-# Block private/API paths
+# Block private/API/auth paths
 Disallow: /api/
 Disallow: /_/
+Disallow: /mcp
+Disallow: /login
+Disallow: /logout
 
-# Sitemaps (all canonical aliases)
-Sitemap: https://wiki-bloc.jkim.win/sitemap.xml
-Sitemap: https://wiki-bloc.jkim.win/sitemap
-Sitemap: https://wiki-bloc.jkim.win/sitemap_index.xml
-Sitemap: https://wiki-bloc.jkim.win/sitemap-index.xml`)
+# Sitemaps
+Sitemap: ${baseUrl}/sitemap.xml
+Sitemap: ${baseUrl}/sitemap
+Sitemap: ${baseUrl}/sitemap_index.xml
+Sitemap: ${baseUrl}/sitemap-index.xml`)
 </script>

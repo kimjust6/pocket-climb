@@ -1,1 +1,25 @@
-privacy
+<script server>
+    const { applyPageMetadata, getBaseUrl } = require(`${__hooks}/pages/utils/common.js`);
+    applyPageMetadata(data.metadata, {
+        title: 'Privacy Policy | Wiki Bloc',
+        description: 'Learn how Wiki Bloc handles cookies, session authentication, and privacy-compliant analytics.',
+        url: `${getBaseUrl()}/privacy`,
+    });
+</script>
+
+<section class="bg-base-100 pt-24 pb-20 min-h-[calc(100vh-12.54rem)] not-prose">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6">
+        <div class="card dark:bg-base-300/80 bg-base-300/60 border border-secondary/20 rounded-2xl p-6 sm:p-8 shadow-lg space-y-5">
+            <h1 class="text-3xl font-bold text-base-content">Privacy Policy</h1>
+            <p class="text-sm text-base-content/85 leading-relaxed">
+                Wiki Bloc respects your privacy. Theme preferences and session cookies are used strictly for site functionality and authentication.
+            </p>
+            <p class="text-sm text-base-content/85 leading-relaxed">
+                Aggregate analytics are configured with IP anonymization enabled and advertising/Google Signals disabled. Search queries are sanitized to strip personal information before logging.
+            </p>
+            <p class="text-sm text-base-content/85 leading-relaxed">
+                You can delete your uploaded climb media directly from the climb page at any time while signed in.
+            </p>
+        </div>
+    </div>
+</section>

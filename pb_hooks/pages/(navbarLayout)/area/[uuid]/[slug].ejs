@@ -17,6 +17,33 @@
 <% if (!areaView) { %>
     <%- include('pagenotfound.ejs') %>
 <% } else { %>
+    <%
+        const areaBreadcrumbLd = {
+            '@context': 'https://schema.org',
+            '@type': 'BreadcrumbList',
+            itemListElement: (areaView.breadcrumbs || []).map((bc, idx) => ({
+                '@type': 'ListItem',
+                position: idx + 1,
+                name: bc.name,
+                item: bc.url
+            }))
+        };
+        const areaPlaceLd = {
+            '@context': 'https://schema.org',
+            '@type': 'Place',
+            name: areaView.name,
+            url: areaView.canonicalPath
+        };
+        if (areaView.hasCoords) {
+            areaPlaceLd.geo = {
+                '@type': 'GeoCoordinates',
+                latitude: areaView.lat,
+                longitude: areaView.lng
+            };
+        }
+    %>
+    <script type="application/ld+json"><%- JSON.stringify(areaBreadcrumbLd).replace(/</g, '\\u003c') %></script>
+    <script type="application/ld+json"><%- JSON.stringify(areaPlaceLd).replace(/</g, '\\u003c') %></script>
     <div class="bg-base-100 pt-24 pb-20 min-h-[calc(100vh-12.54rem)] not-prose">
         <div class="max-w-6xl mx-auto px-4 sm:px-6">
 

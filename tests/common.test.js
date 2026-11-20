@@ -16,6 +16,7 @@ const {
     sanitizeRedirectPath,
     formatNumberWithCommas,
     computeClimbGradeMetrics,
+    applyPageMetadata,
 } = require('../pb_hooks/pages/utils/common.js');
 
 test('sanitizeSearchTerm strips HTML, rejects sensitive patterns, and caps length', () => {
@@ -88,5 +89,28 @@ test('computeClimbGradeMetrics ranks unrated, V-scale, and YDS grades', () => {
     const yds59 = computeClimbGradeMetrics({ primaryGrade: '5.9' });
     const yds512a = computeClimbGradeMetrics({ primaryGrade: '5.12a' });
     assert.ok(yds512a.difficultyRank > yds59.difficultyRank);
+});
+
+test('applyPageMetadata updates title, description, url, image, and robots', () => {
+    const metadata = [
+        { name: 'title', content: 'Old' },
+        { name: 'robots', content: 'index, follow' },
+    ];
+    applyPageMetadata(metadata, {
+        title: 'FAQ | Wiki Bloc',
+        description: 'Helpful FAQ',
+        url: 'https://wiki-bloc.jkim.win/faq',
+        image: 'https://wiki-bloc.jkim.win/og-image.png',
+        robots: 'noindex, nofollow',
+    });
+
+    const get = (k) => metadata.find((m) => m.name === k)?.content;
+    assert.equal(get('title'), 'FAQ | Wiki Bloc');
+    assert.equal(get('og:title'), 'FAQ | Wiki Bloc');
+    assert.equal(get('twitter:title'), 'FAQ | Wiki Bloc');
+    assert.equal(get('description'), 'Helpful FAQ');
+    assert.equal(get('og:url'), 'https://wiki-bloc.jkim.win/faq');
+    assert.equal(get('og:image'), 'https://wiki-bloc.jkim.win/og-image.png');
+    assert.equal(get('robots'), 'noindex, nofollow');
 });
 

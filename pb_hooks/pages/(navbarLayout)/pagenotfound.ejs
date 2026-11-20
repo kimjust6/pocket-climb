@@ -1,5 +1,11 @@
 <script server>
-    api.status = 404
+    const { applyPageMetadata } = require(`${__hooks}/pages/utils/common.js`);
+    api.status = 404;
+    applyPageMetadata(data.metadata, {
+        title: '404 - Page Not Found | Wiki Bloc',
+        description: 'The requested page could not be found on Wiki Bloc.',
+        robots: 'noindex, nofollow',
+    });
 </script>
 
 <%- include('pagenotfound.ejs') %>

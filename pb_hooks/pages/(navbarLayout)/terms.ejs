@@ -1,1 +1,22 @@
-terms of service
+<script server>
+    const { applyPageMetadata, getBaseUrl } = require(`${__hooks}/pages/utils/common.js`);
+    applyPageMetadata(data.metadata, {
+        title: 'Terms of Service | Wiki Bloc',
+        description: 'Terms of Service and safety disclaimer for using Wiki Bloc climbing route and area information.',
+        url: `${getBaseUrl()}/terms`,
+    });
+</script>
+
+<section class="bg-base-100 pt-24 pb-20 min-h-[calc(100vh-12.54rem)] not-prose">
+    <div class="max-w-3xl mx-auto px-4 sm:px-6">
+        <div class="card dark:bg-base-300/80 bg-base-300/60 border border-secondary/20 rounded-2xl p-6 sm:p-8 shadow-lg space-y-5">
+            <h1 class="text-3xl font-bold text-base-content">Terms of Service</h1>
+            <p class="text-sm text-base-content/85 leading-relaxed">
+                Wiki Bloc provides community-sourced climbing information for reference only. Climbing carries inherent risks—always verify anchors, rock quality, access restrictions, and weather conditions independently.
+            </p>
+            <p class="text-sm text-base-content/85 leading-relaxed">
+                By uploading photos or submitting ticks, you confirm that you have the right to share the content and grant Wiki Bloc permission to display it on the site.
+            </p>
+        </div>
+    </div>
+</section>

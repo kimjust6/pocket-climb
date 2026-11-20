@@ -5,23 +5,7 @@
     class="<%= data.theme === 'dark' ? 'dark' : '' %>"
 >
     <head>
-        <script>
-            (function () {
-                try {
-                    var match = document.cookie.match(/(^|;)\s*theme=([^;]+)/);
-                    var saved = match ? match[2] : null;
-                    if (!saved) saved = localStorage.getItem('theme');
-                    if (saved === 'nord' || saved === 'dark') {
-                        document.documentElement.setAttribute('data-theme', saved);
-                        if (saved === 'dark') {
-                            document.documentElement.classList.add('dark');
-                        } else {
-                            document.documentElement.classList.remove('dark');
-                        }
-                    }
-                } catch (_) {}
-            })();
-        </script>
+        <script src="/js/site-init.js"></script>
         <meta charset="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
@@ -86,33 +70,22 @@
             if (isArticle) {
                 jsonLd = {
                     "@context": "https://schema.org",
-                    "@type": "BlogPosting",
+                    "@type": "WebPage",
                     "mainEntityOfPage": {
                         "@type": "WebPage",
                         "@id": pageCanonical
                     },
-                    "headline": pageTitle,
+                    "name": pageTitle,
                     "description": pageDesc,
                     "image": [pageImg],
-                    "author": {
-                        "@type": "Person",
-                        "name": metaGet('author') || "Justin Kim",
-                        "url": metaGet('article:author') || "https://www.justink.dev"
-                    },
                     "publisher": {
-                        "@type": "Person",
-                        "name": "Justin Kim",
-                        "url": "https://www.justink.dev"
+                        "@type": "Organization",
+                        "name": "Wiki Bloc",
+                        "url": "https://wiki-bloc.jkim.win/"
                     }
                 };
-                const pubTime = metaGet('article:published_time');
-                if (pubTime) jsonLd.datePublished = pubTime;
-                const modTime = metaGet('article:modified_time') || pubTime;
-                if (modTime) jsonLd.dateModified = modTime;
                 const keywords = metaGet('keywords');
                 if (keywords) jsonLd.keywords = keywords;
-                const section = metaGet('article:section');
-                if (section) jsonLd.articleSection = section;
             } else {
                 jsonLd = {
                     "@context": "https://schema.org",
@@ -120,10 +93,15 @@
                     "name": "Wiki Bloc",
                     "url": pageCanonical,
                     "description": pageDesc,
-                    "author": {
-                        "@type": "Person",
-                        "name": "Justin Kim",
-                        "url": "https://www.justink.dev"
+                    "potentialAction": {
+                        "@type": "SearchAction",
+                        "target": `${pageCanonical.replace(/\/+$/, '')}/?query={search_term_string}`,
+                        "query-input": "required name=search_term_string"
+                    },
+                    "publisher": {
+                        "@type": "Organization",
+                        "name": "Wiki Bloc",
+                        "url": "https://wiki-bloc.jkim.win/"
                     }
                 };
             }
@@ -164,93 +142,14 @@
         }
         </script>
         <!-- Vue 3 & Vue Router (No-Build Mode - Local) -->
-        <script type="importmap">
-        {
-            "imports": {
-                "vue": "/js/vue.esm-browser.prod.js",
-                "vue-router": "/js/vue-router.esm-browser.prod.js"
-            }
-        }
-        </script>
         <script src="/js/vue.global.prod.js"></script>
         <script src="/js/vue-router.global.prod.js"></script>
         <script src="/js/app-router.js?v=2"></script>
-        <script>
-            /* Theme toggle — runs synchronously so there is no flash of unstyled icons.
-               Exposed as window.toggleTheme so the navbar button can call it inline. */
-            (function () {
-                function syncThemeIcons(theme) {
-                    var currentTheme = theme || document.documentElement.getAttribute('data-theme') || 'dark';
-                    var sun = document.getElementById('theme-icon-sun');
-                    var moon = document.getElementById('theme-icon-moon');
-                    if (sun) sun.style.display = currentTheme === 'dark' ? 'inline-block' : 'none';
-                    if (moon) moon.style.display = currentTheme === 'nord' ? 'inline-block' : 'none';
-                }
-
-                function toggleTheme() {
-                    var html = document.documentElement;
-                    var currentTheme = html.getAttribute('data-theme') === 'nord' ? 'nord' : 'dark';
-                    var newTheme = currentTheme === 'dark' ? 'nord' : 'dark';
-
-                    html.setAttribute('data-theme', newTheme);
-                    try { localStorage.setItem('theme', newTheme); } catch (_) {}
-                    document.cookie = 'theme=' + newTheme + '; path=/; max-age=31536000; SameSite=Lax';
-                    html.classList.toggle('dark', newTheme === 'dark');
-                    syncThemeIcons(newTheme);
-                }
-
-                window.toggleTheme = toggleTheme;
-
-                // Sync icons on page load and back/forward restore
-                document.addEventListener('DOMContentLoaded', function () { syncThemeIcons(); });
-                window.addEventListener('pageshow', function () { syncThemeIcons(); });
-            })();
-
-            // Register Service Worker for local caching and offline support
-            if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function () {
-                    navigator.serviceWorker.register('/sw.js').catch(function (err) {
-                        console.debug('SW registration skipped:', err);
-                    });
-                });
-            }
-
-            // Link hover prefetching for instant page navigation
-            (function () {
-                var prefetchedUrls = new Set();
-                document.addEventListener('pointerenter', function (e) {
-                    var a = e.target && e.target.closest ? e.target.closest('a') : null;
-                    if (a && a.href && a.origin === location.origin && !a.hasAttribute('download')) {
-                        if (!prefetchedUrls.has(a.href)) {
-                            prefetchedUrls.add(a.href);
-                            var link = document.createElement('link');
-                            link.rel = 'prefetch';
-                            link.href = a.href;
-                            document.head.appendChild(link);
-                        }
-                    }
-                }, { passive: true, capture: true });
-            })();
-        </script>
         <!-- Google tag (gtag.js) -->
         <script
             async
             src="https://www.googletagmanager.com/gtag/js?id=G-6P8M4DJNQL"
         ></script>
-        <script>
-            window.dataLayer = window.dataLayer || []
-            function gtag() {
-                dataLayer.push(arguments)
-            }
-            gtag('js', new Date())
-
-            gtag('config', 'G-6P8M4DJNQL', {
-                anonymize_ip: true,
-                allow_google_signals: false,
-                allow_ad_personalization_signals: false,
-                cookie_flags: 'SameSite=Lax;Secure'
-            })
-        </script>
     </head>
 
     <body class="flex min-h-screen flex-col">
