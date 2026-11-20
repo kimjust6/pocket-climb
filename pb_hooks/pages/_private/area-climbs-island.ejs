@@ -110,19 +110,27 @@
                 </button>
             </div>
 
-            <!-- Grade Tier Filter Dropdown -->
-            <div class="sm:col-span-4">
+            <!-- Grade Min/Max Range Filter -->
+            <div class="sm:col-span-4 grid grid-cols-2 gap-2">
                 <select
-                    v-model="gradeTierFilter"
+                    v-model="minGradeRank"
                     class="select select-bordered select-sm w-full rounded-xl bg-base-100 border-base-content/25 text-xs focus:outline-none focus:ring-2 focus:ring-accent font-medium"
-                    aria-label="Filter by difficulty tier"
+                    aria-label="Minimum grade"
                 >
-                    <option value="ALL">All Difficulties</option>
-                    <option value="Beginner">Beginner (≤ 5.7 / VB-V0)</option>
-                    <option value="Intermediate">Intermediate (5.8 – 5.10d / V1-V4)</option>
-                    <option value="Advanced">Advanced (5.11a – 5.12d / V5-V8)</option>
-                    <option value="Expert">Expert (5.13a – 5.13d / V9-V12)</option>
-                    <option value="Elite">Elite (5.14+ / V13+)</option>
+                    <option value="">Min Grade</option>
+                    <option v-for="opt in availableGradeOptions" :key="'min-' + opt.rank" :value="String(opt.rank)">
+                        {{ opt.label }}
+                    </option>
+                </select>
+                <select
+                    v-model="maxGradeRank"
+                    class="select select-bordered select-sm w-full rounded-xl bg-base-100 border-base-content/25 text-xs focus:outline-none focus:ring-2 focus:ring-accent font-medium"
+                    aria-label="Maximum grade"
+                >
+                    <option value="">Max Grade</option>
+                    <option v-for="opt in availableGradeOptions" :key="'max-' + opt.rank" :value="String(opt.rank)">
+                        {{ opt.label }}
+                    </option>
                 </select>
             </div>
 
@@ -135,10 +143,15 @@
                 >
                     <option value="default">Default Order</option>
                     <option value="name-asc">Name (A → Z)</option>
+                    <option value="name-desc">Name (Z → A)</option>
                     <option value="grade-asc">Grade (Easiest First)</option>
                     <option value="grade-desc">Grade (Hardest First)</option>
+                    <option value="discipline-asc">Discipline (A → Z)</option>
+                    <option value="discipline-desc">Discipline (Z → A)</option>
                     <option value="length-desc">Length (Tallest First)</option>
+                    <option value="length-asc">Length (Shortest First)</option>
                     <option value="pitches-desc">Pitches (Most First)</option>
+                    <option value="pitches-asc">Pitches (Fewest First)</option>
                 </select>
             </div>
         </div>
@@ -418,11 +431,36 @@
             <table class="table table-sm w-full">
                 <thead>
                     <tr class="border-b border-base-content/10 text-secondary text-xs uppercase tracking-wider font-bold">
-                        <th>Route Name</th>
-                        <th>Grade</th>
-                        <th>Discipline</th>
-                        <th class="hidden sm:table-cell">Length</th>
-                        <th class="hidden md:table-cell">Pitches</th>
+                        <th :aria-sort="getAriaSort('name')">
+                            <button type="button" @click="toggleColumnSort('name', 'asc')" class="inline-flex items-center gap-1 hover:text-accent cursor-pointer uppercase font-bold">
+                                <span>Route Name</span>
+                                <span aria-hidden="true" class="text-[10px] opacity-70">{{ getSortArrow('name') }}</span>
+                            </button>
+                        </th>
+                        <th :aria-sort="getAriaSort('grade')">
+                            <button type="button" @click="toggleColumnSort('grade', 'asc')" class="inline-flex items-center gap-1 hover:text-accent cursor-pointer uppercase font-bold">
+                                <span>Grade</span>
+                                <span aria-hidden="true" class="text-[10px] opacity-70">{{ getSortArrow('grade') }}</span>
+                            </button>
+                        </th>
+                        <th :aria-sort="getAriaSort('discipline')">
+                            <button type="button" @click="toggleColumnSort('discipline', 'asc')" class="inline-flex items-center gap-1 hover:text-accent cursor-pointer uppercase font-bold">
+                                <span>Discipline</span>
+                                <span aria-hidden="true" class="text-[10px] opacity-70">{{ getSortArrow('discipline') }}</span>
+                            </button>
+                        </th>
+                        <th class="hidden sm:table-cell" :aria-sort="getAriaSort('length')">
+                            <button type="button" @click="toggleColumnSort('length', 'desc')" class="inline-flex items-center gap-1 hover:text-accent cursor-pointer uppercase font-bold">
+                                <span>Length</span>
+                                <span aria-hidden="true" class="text-[10px] opacity-70">{{ getSortArrow('length') }}</span>
+                            </button>
+                        </th>
+                        <th class="hidden md:table-cell" :aria-sort="getAriaSort('pitches')">
+                            <button type="button" @click="toggleColumnSort('pitches', 'desc')" class="inline-flex items-center gap-1 hover:text-accent cursor-pointer uppercase font-bold">
+                                <span>Pitches</span>
+                                <span aria-hidden="true" class="text-[10px] opacity-70">{{ getSortArrow('pitches') }}</span>
+                            </button>
+                        </th>
                         <th class="text-right">Actions</th>
                     </tr>
                 </thead>
@@ -552,16 +590,20 @@
             const initialDisc = (route && route.query && typeof route.query.disc === 'string')
                 ? route.query.disc
                 : 'ALL';
-            const initialTier = (route && route.query && typeof route.query.tier === 'string')
-                ? route.query.tier
-                : 'ALL';
+            const initialMinGrade = (route && route.query && typeof route.query.min_grade === 'string')
+                ? route.query.min_grade
+                : '';
+            const initialMaxGrade = (route && route.query && typeof route.query.max_grade === 'string')
+                ? route.query.max_grade
+                : '';
             const initialSort = (route && route.query && typeof route.query.sort === 'string')
                 ? route.query.sort
                 : 'default';
 
             const searchQuery = ref(initialQ);
             const disciplineFilter = ref(initialDisc);
-            const gradeTierFilter = ref(initialTier);
+            const minGradeRank = ref(initialMinGrade);
+            const maxGradeRank = ref(initialMaxGrade);
             const sortBy = ref(initialSort);
             const viewMode = ref('grid');
 
@@ -575,23 +617,82 @@
                 } catch (_) {}
             });
 
+            let isSyncingFromRoute = false;
+
             if (route) {
                 watch(() => route.query.climb_q, (newQ) => {
-                    if (typeof newQ === 'string' && newQ !== searchQuery.value) {
-                        searchQuery.value = newQ;
+                    const val = typeof newQ === 'string' ? newQ : '';
+                    if (val !== searchQuery.value) {
+                        isSyncingFromRoute = true;
+                        searchQuery.value = val;
+                        isSyncingFromRoute = false;
                     }
                 });
                 watch(() => route.query.disc, (newD) => {
-                    if (typeof newD === 'string' && newD !== disciplineFilter.value) {
-                        disciplineFilter.value = newD;
+                    const val = typeof newD === 'string' ? newD : 'ALL';
+                    if (val !== disciplineFilter.value) {
+                        isSyncingFromRoute = true;
+                        disciplineFilter.value = val;
+                        isSyncingFromRoute = false;
                     }
                 });
-                watch(() => route.query.tier, (newT) => {
-                    if (typeof newT === 'string' && newT !== gradeTierFilter.value) {
-                        gradeTierFilter.value = newT;
+                watch(() => route.query.min_grade, (newMin) => {
+                    const val = typeof newMin === 'string' ? newMin : '';
+                    if (val !== minGradeRank.value) {
+                        isSyncingFromRoute = true;
+                        minGradeRank.value = val;
+                        isSyncingFromRoute = false;
+                    }
+                });
+                watch(() => route.query.max_grade, (newMax) => {
+                    const val = typeof newMax === 'string' ? newMax : '';
+                    if (val !== maxGradeRank.value) {
+                        isSyncingFromRoute = true;
+                        maxGradeRank.value = val;
+                        isSyncingFromRoute = false;
+                    }
+                });
+                watch(() => route.query.sort, (newS) => {
+                    const val = typeof newS === 'string' ? newS : 'default';
+                    if (val !== sortBy.value) {
+                        isSyncingFromRoute = true;
+                        sortBy.value = val;
+                        isSyncingFromRoute = false;
                     }
                 });
             }
+
+            // Sync filter & sort state back to the URL query string
+            watch([searchQuery, disciplineFilter, minGradeRank, maxGradeRank, sortBy], ([q, disc, minG, maxG, sort]) => {
+                if (isSyncingFromRoute || !isMounted.value) return;
+
+                const currentQuery = (route && route.query) ? { ...route.query } : {};
+                const syncParam = (key, val, defaultVal) => {
+                    if (val !== undefined && val !== null && val !== '' && val !== defaultVal) {
+                        currentQuery[key] = String(val);
+                    } else {
+                        delete currentQuery[key];
+                    }
+                };
+
+                syncParam('climb_q', q.trim(), '');
+                syncParam('disc', disc, 'ALL');
+                syncParam('min_grade', minG, '');
+                syncParam('max_grade', maxG, '');
+                syncParam('sort', sort, 'default');
+
+                if (routerInstance && typeof routerInstance.replace === 'function') {
+                    routerInstance.replace({ query: currentQuery, hash: window.location.hash || undefined }).catch(() => {});
+                } else if (typeof window !== 'undefined' && window.history && window.history.replaceState) {
+                    const params = new URLSearchParams();
+                    Object.keys(currentQuery).forEach((k) => {
+                        if (currentQuery[k] !== undefined) params.set(k, String(currentQuery[k]));
+                    });
+                    const qs = params.toString();
+                    const nextUrl = window.location.pathname + (qs ? '?' + qs : '') + (window.location.hash || '');
+                    window.history.replaceState(window.history.state, '', nextUrl);
+                }
+            });
 
             // Extract unique disciplines with route counts
             const availableDisciplines = computed(() => {
@@ -609,24 +710,61 @@
                 })).sort((a, b) => b.count - a.count);
             });
 
+            // Keep min <= max when both are selected
+            watch(minGradeRank, (newMin) => {
+                if (newMin !== '' && maxGradeRank.value !== '' && Number(newMin) > Number(maxGradeRank.value)) {
+                    maxGradeRank.value = newMin;
+                }
+            });
+            watch(maxGradeRank, (newMax) => {
+                if (newMax !== '' && minGradeRank.value !== '' && Number(newMax) < Number(minGradeRank.value)) {
+                    minGradeRank.value = newMax;
+                }
+            });
+
+            // Extract unique grades present in this area, ordered from easiest to hardest
+            const availableGradeOptions = computed(() => {
+                const byRank = new Map();
+                allClimbs.value.forEach(cl => {
+                    const rank = Number(cl.difficultyRank || 0);
+                    const grade = String(cl.primaryGrade || '').trim();
+                    if (rank > 0 && grade) {
+                        if (!byRank.has(rank)) {
+                            byRank.set(rank, { rank, labels: new Set([grade]) });
+                        } else {
+                            byRank.get(rank).labels.add(grade);
+                        }
+                    }
+                });
+                return Array.from(byRank.values())
+                    .sort((a, b) => a.rank - b.rank)
+                    .map(entry => ({
+                        rank: entry.rank,
+                        label: Array.from(entry.labels).slice(0, 2).join(' / ')
+                    }));
+            });
+
             const hasActiveFilters = computed(() => {
                 return searchQuery.value.trim() !== '' ||
                     disciplineFilter.value !== 'ALL' ||
-                    gradeTierFilter.value !== 'ALL' ||
+                    minGradeRank.value !== '' ||
+                    maxGradeRank.value !== '' ||
                     sortBy.value !== 'default';
             });
 
             function resetAllFilters() {
                 searchQuery.value = '';
                 disciplineFilter.value = 'ALL';
-                gradeTierFilter.value = 'ALL';
+                minGradeRank.value = '';
+                maxGradeRank.value = '';
                 sortBy.value = 'default';
             }
 
             const filteredClimbs = computed(() => {
                 const q = searchQuery.value.trim().toLowerCase();
                 const disc = disciplineFilter.value.toLowerCase();
-                const tier = gradeTierFilter.value;
+                const minRank = minGradeRank.value !== '' ? Number(minGradeRank.value) : null;
+                const maxRank = maxGradeRank.value !== '' ? Number(maxGradeRank.value) : null;
                 const sort = sortBy.value;
 
                 let list = allClimbs.value.filter(cl => {
@@ -636,9 +774,12 @@
                         if (!clDiscs.includes(disc)) return false;
                     }
 
-                    // Grade Tier filter
-                    if (tier !== 'ALL') {
-                        if (cl.difficultyTier !== tier) return false;
+                    // Min/Max Grade Range filter
+                    if (minRank !== null || maxRank !== null) {
+                        const rank = Number(cl.difficultyRank || 0);
+                        if (rank <= 0) return false;
+                        if (minRank !== null && rank < minRank) return false;
+                        if (maxRank !== null && rank > maxRank) return false;
                     }
 
                     // Search query
@@ -657,12 +798,18 @@
                 });
 
                 // Sorting
+                const getFirstDiscipline = (cl) => ((cl.disciplines && cl.disciplines[0]) || '').toLowerCase();
                 const sortComparators = {
                     'name-asc': (a, b) => (a.name || '').localeCompare(b.name || ''),
+                    'name-desc': (a, b) => (b.name || '').localeCompare(a.name || ''),
                     'grade-asc': (a, b) => (a.difficultyRank || 0) - (b.difficultyRank || 0),
                     'grade-desc': (a, b) => (b.difficultyRank || 0) - (a.difficultyRank || 0),
+                    'discipline-asc': (a, b) => getFirstDiscipline(a).localeCompare(getFirstDiscipline(b)),
+                    'discipline-desc': (a, b) => getFirstDiscipline(b).localeCompare(getFirstDiscipline(a)),
                     'length-desc': (a, b) => (b.length || 0) - (a.length || 0),
+                    'length-asc': (a, b) => (a.length || 0) - (b.length || 0),
                     'pitches-desc': (a, b) => (b.pitchesCount || 0) - (a.pitchesCount || 0),
+                    'pitches-asc': (a, b) => (a.pitchesCount || 0) - (b.pitchesCount || 0),
                 };
                 if (sortComparators[sort]) {
                     list.sort(sortComparators[sort]);
@@ -670,6 +817,30 @@
 
                 return list;
             });
+
+            function toggleColumnSort(column, initialDir = 'asc') {
+                const ascKey = `${column}-asc`;
+                const descKey = `${column}-desc`;
+                if (sortBy.value === ascKey) {
+                    sortBy.value = descKey;
+                } else if (sortBy.value === descKey) {
+                    sortBy.value = ascKey;
+                } else {
+                    sortBy.value = initialDir === 'desc' ? descKey : ascKey;
+                }
+            }
+
+            function getSortArrow(column) {
+                if (sortBy.value === `${column}-asc`) return '↑';
+                if (sortBy.value === `${column}-desc`) return '↓';
+                return '↕';
+            }
+
+            function getAriaSort(column) {
+                if (sortBy.value === `${column}-asc`) return 'ascending';
+                if (sortBy.value === `${column}-desc`) return 'descending';
+                return 'none';
+            }
 
             function handleImageError(event, fallbackUrl) {
                 if (fallbackUrl && event && event.target && event.target.src !== fallbackUrl) {
@@ -683,13 +854,18 @@
                 auth,
                 searchQuery,
                 disciplineFilter,
-                gradeTierFilter,
+                minGradeRank,
+                maxGradeRank,
                 sortBy,
                 viewMode,
                 availableDisciplines,
+                availableGradeOptions,
                 hasActiveFilters,
                 filteredClimbs,
                 resetAllFilters,
+                toggleColumnSort,
+                getSortArrow,
+                getAriaSort,
                 handleImageError
             };
         }
