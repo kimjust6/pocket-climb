@@ -27,11 +27,26 @@ async function run() {
     console.log(`Target URL:   ${targetUrl}`)
     console.log('='.repeat(60))
 
-    // Step 1: Database Schema Migration / Sync
-    if (skipMigrate) {
-        console.log('\n[1/2] Skipping database migration (--skip-migrate passed)')
+    // Step 1: Build minified CSS
+    console.log('\n[1/3] Building minified Tailwind CSS...')
+    if (dryRun) {
+        console.log('  [Dry Run] Would execute: npm run build')
     } else {
-        console.log(`\n[1/2] Checking and updating database schema on ${targetUrl}...`)
+        const buildResult = spawnSync('npm', ['run', 'build'], {
+            stdio: 'inherit',
+            shell: true,
+        })
+        if (buildResult.status !== 0) {
+            console.error(`\n[ERROR] CSS build failed with exit code ${buildResult.status}`)
+            process.exit(buildResult.status || 1)
+        }
+    }
+
+    // Step 2: Database Schema Migration / Sync
+    if (skipMigrate) {
+        console.log('\n[2/3] Skipping database migration (--skip-migrate passed)')
+    } else {
+        console.log(`\n[2/3] Checking and updating database schema on ${targetUrl}...`)
         try {
             if (!username || !password) {
                 console.warn(
@@ -55,8 +70,8 @@ async function run() {
         }
     }
 
-    // Step 2: Deploy code via phio deploy
-    console.log(`\n[2/2] Deploying code to PocketHost (${instanceName})...`)
+    // Step 3: Deploy code via phio deploy
+    console.log(`\n[3/3] Deploying code to PocketHost (${instanceName})...`)
     if (dryRun) {
         console.log('  [Dry Run] Would execute: npx phio deploy ' + instanceName)
         console.log('\n' + '='.repeat(60))

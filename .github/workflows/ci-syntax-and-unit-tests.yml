@@ -22,6 +22,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Build CSS
+        run: npm run build
+
       - name: Syntax check backend scripts
         run: npm run check
 
